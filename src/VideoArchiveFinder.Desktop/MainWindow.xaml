@@ -61,20 +61,124 @@
                     Background="White"
                     BorderBrush="#D1D5DB"
                     BorderThickness="1">
-                <DockPanel>
-                    <TextBlock DockPanel.Dock="Top"
-                               Margin="0,0,0,12"
-                               FontSize="17"
-                               FontWeight="SemiBold"
-                               Text="Источники"/>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
 
-                    <TextBlock HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               Foreground="#6B7280"
-                               TextAlignment="Center"
-                               TextWrapping="Wrap"
-                               Text="Источники архива пока не добавлены"/>
-                </DockPanel>
+                    <TextBlock Grid.Row="0"
+               Margin="0,0,0,12"
+               FontSize="17"
+               FontWeight="SemiBold"
+               Text="Источники"/>
+
+                    <Grid Grid.Row="1">
+                        <TextBlock HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   Foreground="#6B7280"
+                   TextAlignment="Center"
+                   TextWrapping="Wrap"
+                   Text="Загрузка источников архива...">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility"
+                            Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsLoadingSources}"
+                                     Value="True">
+                                            <Setter Property="Visibility"
+                                    Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
+                        <TextBlock HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   Foreground="#6B7280"
+                   TextAlignment="Center"
+                   TextWrapping="Wrap"
+                   Text="Источники архива пока не добавлены">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility"
+                            Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsLoadingSources}"
+                                     Value="True">
+                                            <Setter Property="Visibility"
+                                    Value="Collapsed"/>
+                                        </DataTrigger>
+
+                                        <DataTrigger Binding="{Binding HasSources}"
+                                     Value="True">
+                                            <Setter Property="Visibility"
+                                    Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
+                        <ListBox ItemsSource="{Binding Sources}"
+                 BorderThickness="0"
+                 Background="Transparent"
+                 HorizontalContentAlignment="Stretch"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                 VirtualizingPanel.IsVirtualizing="True"
+                 VirtualizingPanel.VirtualizationMode="Recycling">
+                            <ListBox.Style>
+                                <Style TargetType="ListBox">
+                                    <Setter Property="Visibility"
+                            Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasSources}"
+                                     Value="True">
+                                            <Setter Property="Visibility"
+                                    Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ListBox.Style>
+
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="4,6"
+                          ToolTip="{Binding FullPath}">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Grid.Row="0"
+                                   FontWeight="SemiBold"
+                                   Text="{Binding DisplayName}"
+                                   TextTrimming="CharacterEllipsis"/>
+
+                                        <TextBlock Grid.Row="1"
+                                   Margin="0,3,0,0"
+                                   Foreground="#6B7280"
+                                   FontSize="12"
+                                   Text="{Binding SourceTypeText}"
+                                   TextTrimming="CharacterEllipsis"/>
+
+                                        <TextBlock Grid.Row="2"
+                                   Margin="0,3,0,0"
+                                   Foreground="#4B5563"
+                                   FontSize="12"
+                                   Text="{Binding FullPath}"
+                                   TextTrimming="CharacterEllipsis"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </Grid>
+
             </Border>
 
             <GridSplitter Grid.Column="1"

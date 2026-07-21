@@ -43,9 +43,17 @@ public partial class App : System.Windows.Application
 
         await _host.StartAsync();
 
-        var mainWindow = _host.Services.GetRequiredService<MainWindow>();
+        var viewModel =
+            _host.Services.GetRequiredService<MainWindowViewModel>();
+
+        await viewModel.InitializeAsync();
+
+        var mainWindow =
+            _host.Services.GetRequiredService<MainWindow>();
+
         MainWindow = mainWindow;
         mainWindow.Show();
+
 
         Log.Information("Video Archive Finder started");
     }
