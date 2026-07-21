@@ -19,6 +19,10 @@ public static class DependencyInjection
             IArchiveSourceStore,
             JsonArchiveSourceStore>();
 
+        services.AddSingleton<
+            IArchiveSourceService,
+            ArchiveSourceService>();
+
         return services;
     }
 }
