@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Serilog;
 using System.IO;
 using VideoArchiveFinder.Desktop.ViewModels;
+using VideoArchiveFinder.Infrastructure;
 
 namespace VideoArchiveFinder.Desktop;
 
@@ -34,6 +35,7 @@ public partial class App : System.Windows.Application
             .UseSerilog()
             .ConfigureServices(services =>
             {
+                services.AddVideoArchiveFinderInfrastructure();
                 services.AddSingleton<MainWindowViewModel>();
                 services.AddSingleton<MainWindow>();
             })
@@ -62,3 +64,4 @@ public partial class App : System.Windows.Application
         base.OnExit(e);
     }
 }
+

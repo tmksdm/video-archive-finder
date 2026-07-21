@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\VideoArchiveFinder.Application\VideoArchiveFinder.Application.csproj" />
     <ProjectReference Include="..\..\src\VideoArchiveFinder.Domain\VideoArchiveFinder.Domain.csproj" />
+    <ProjectReference Include="..\..\src\VideoArchiveFinder.Infrastructure\VideoArchiveFinder.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
