@@ -1,0 +1,134 @@
+﻿<Window x:Class="VideoArchiveFinder.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        Title="Video Archive Finder"
+        Width="1280"
+        Height="800"
+        MinWidth="900"
+        MinHeight="600"
+        WindowStartupLocation="CenterScreen">
+
+    <Grid Background="#F3F4F6">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0"
+                Padding="12"
+                Background="White"
+                BorderBrush="#D1D5DB"
+                BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBox Grid.Column="0"
+                         Height="40"
+                         Padding="12,6"
+                         VerticalContentAlignment="Center"
+                         FontSize="16"
+                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Поиск по названиям папок"/>
+
+                <Button Grid.Column="1"
+        Width="40"
+        Height="40"
+        Margin="8,0,0,0"
+        ToolTip="Настройки"
+        AutomationProperties.Name="Настройки">
+                    <materialDesign:PackIcon Kind="Cog"
+                             Width="20"
+                             Height="20"/>
+                </Button>
+
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.2*" MinWidth="220"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition Width="3.8*" MinWidth="400"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0"
+                    Padding="12"
+                    Background="White"
+                    BorderBrush="#D1D5DB"
+                    BorderThickness="1">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top"
+                               Margin="0,0,0,12"
+                               FontSize="17"
+                               FontWeight="SemiBold"
+                               Text="Источники"/>
+
+                    <TextBlock HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Foreground="#6B7280"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               Text="Источники архива пока не добавлены"/>
+                </DockPanel>
+            </Border>
+
+            <GridSplitter Grid.Column="1"
+                          Width="6"
+                          HorizontalAlignment="Stretch"
+                          VerticalAlignment="Stretch"
+                          Background="Transparent"
+                          Cursor="SizeWE"
+                          ResizeBehavior="PreviousAndNext"
+                          ResizeDirection="Columns"
+                          ShowsPreview="True"/>
+
+            <Border Grid.Column="2"
+                    Padding="12"
+                    Background="White"
+                    BorderBrush="#D1D5DB"
+                    BorderThickness="1">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0"
+                               Margin="0,0,0,12"
+                               FontSize="17"
+                               FontWeight="SemiBold"
+                               Text="Результаты поиска"/>
+
+                    <StackPanel Grid.Row="1"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
+                        <TextBlock HorizontalAlignment="Center"
+                                   FontSize="18"
+                                   FontWeight="SemiBold"
+                                   Text="Video Archive Finder"/>
+
+                        <TextBlock Margin="0,8,0,0"
+                                   Foreground="#6B7280"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   Text="Добавьте источник архива, чтобы начать поиск"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="2"
+                Padding="12,6"
+                Background="White"
+                BorderBrush="#D1D5DB"
+                BorderThickness="0,1,0,0">
+            <TextBlock Foreground="#4B5563"
+                       Text="{Binding StatusText}"/>
+        </Border>
+    </Grid>
+</Window>
