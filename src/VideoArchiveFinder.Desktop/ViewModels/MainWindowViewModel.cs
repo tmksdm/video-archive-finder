@@ -15,6 +15,8 @@ public partial class MainWindowViewModel : ObservableObject
         _archiveSourceAvailabilityChecker;
     private readonly ILocalFolderPicker _localFolderPicker;
     private readonly IUncPathInputDialog _uncPathInputDialog;
+    private readonly IArchiveSourceRemovalConfirmationDialog
+        _archiveSourceRemovalConfirmationDialog;
     private readonly ILogger<MainWindowViewModel> _logger;
 
     [ObservableProperty]
@@ -23,12 +25,22 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(AddLocalFolderCommand))]
     [NotifyCanExecuteChangedFor(nameof(AddUncPathCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RemoveSourceCommand))]
     private bool _isLoadingSources;
+
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(AddLocalFolderCommand))]
     [NotifyCanExecuteChangedFor(nameof(AddUncPathCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RemoveSourceCommand))]
     private bool _isAddingSource;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(AddLocalFolderCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AddUncPathCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RemoveSourceCommand))]
+    private bool _isRemovingSource;
+
 
     [ObservableProperty]
     private bool _hasSources;
@@ -40,7 +52,9 @@ public partial class MainWindowViewModel : ObservableObject
         IArchiveSourceService archiveSourceService,
         IArchiveSourceAvailabilityChecker archiveSourceAvailabilityChecker,
         ILocalFolderPicker localFolderPicker,
-            IUncPathInputDialog uncPathInputDialog,
+        IUncPathInputDialog uncPathInputDialog,
+        IArchiveSourceRemovalConfirmationDialog
+            archiveSourceRemovalConfirmationDialog,
         ILogger<MainWindowViewModel> logger)
     {
         _archiveSourceService = archiveSourceService;
@@ -48,8 +62,11 @@ public partial class MainWindowViewModel : ObservableObject
             archiveSourceAvailabilityChecker;
         _localFolderPicker = localFolderPicker;
         _uncPathInputDialog = uncPathInputDialog;
+        _archiveSourceRemovalConfirmationDialog =
+            archiveSourceRemovalConfirmationDialog;
         _logger = logger;
     }
+
 
     public ObservableCollection<ArchiveSourceItemViewModel> Sources { get; } = [];
 
@@ -167,8 +184,88 @@ public partial class MainWindowViewModel : ObservableObject
     private bool CanAddSource()
     {
         return !IsLoadingSources &&
-               !IsAddingSource;
+               !IsAddingSource &&
+               !IsRemovingSource;
     }
+
+    private bool CanRemoveSource(
+        ArchiveSourceItemViewModel? source)
+    {
+        return source is not null &&
+               !IsLoadingSources &&
+               !IsAddingSource &&
+               !IsRemovingSource;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanRemoveSource))]
+    private async Task RemoveSourceAsync(
+        ArchiveSourceItemViewModel? source)
+    {
+        if (source is null)
+        {
+            return;
+        }
+
+        var removalConfirmed =
+            _archiveSourceRemovalConfirmationDialog.ConfirmRemoval(
+                source.DisplayName,
+                source.FullPath);
+
+        if (!removalConfirmed)
+        {
+            StatusText = "Удаление источника отменено";
+            return;
+        }
+
+        IsRemovingSource = true;
+        StatusText =
+            $"Удаление источника «{source.DisplayName}» из приложения...";
+
+        try
+        {
+            var wasRemoved =
+                await _archiveSourceService.RemoveAsync(source.Id);
+
+            if (!wasRemoved)
+            {
+                StatusText =
+                    "Источник уже отсутствует в настройках приложения";
+
+                _logger.LogWarning(
+                    "Archive source {SourceId} was not found during removal.",
+                    source.Id);
+
+                return;
+            }
+
+            Sources.Remove(source);
+            HasSources = Sources.Count > 0;
+
+            StatusText = HasSources
+                ? $"Источник «{source.DisplayName}» удалён только из приложения"
+                : "Источник удалён только из приложения. " +
+                  "Папки и файлы на диске не изменены.";
+
+            _logger.LogInformation(
+                "Archive source {SourceId} was removed from the application.",
+                source.Id);
+        }
+        catch (Exception exception)
+        {
+            StatusText =
+                "Не удалось удалить источник из приложения";
+
+            _logger.LogError(
+                exception,
+                "Archive source {SourceId} could not be removed.",
+                source.Id);
+        }
+        finally
+        {
+            IsRemovingSource = false;
+        }
+    }
+
 
     private async Task AddSourceAsync(string fullPath)
     {

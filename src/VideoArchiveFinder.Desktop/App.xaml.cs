@@ -41,6 +41,9 @@ public partial class App : System.Windows.Application
                 services.AddSingleton<
                     IUncPathInputDialog,
                     WindowsUncPathInputDialog>();
+                services.AddSingleton<
+                    IArchiveSourceRemovalConfirmationDialog,
+                    WindowsArchiveSourceRemovalConfirmationDialog>();
                 services.AddSingleton<MainWindowViewModel>();
                 services.AddSingleton<MainWindow>();
             })

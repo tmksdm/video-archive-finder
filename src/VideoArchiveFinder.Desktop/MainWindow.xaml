@@ -159,7 +159,8 @@
                             </TextBlock.Style>
                         </TextBlock>
 
-                        <ListBox ItemsSource="{Binding Sources}"
+                        <ListBox x:Name="ArchiveSourcesList"
+         ItemsSource="{Binding Sources}"
                  BorderThickness="0"
                  Background="Transparent"
                  HorizontalContentAlignment="Stretch"
@@ -167,6 +168,13 @@
                  ScrollViewer.VerticalScrollBarVisibility="Auto"
                  VirtualizingPanel.IsVirtualizing="True"
                  VirtualizingPanel.VirtualizationMode="Recycling">
+                            <ListBox.InputBindings>
+                                <KeyBinding Key="Delete"
+                Command="{Binding RemoveSourceCommand}"
+                CommandParameter="{Binding SelectedItem,
+                                           ElementName=ArchiveSourcesList}"/>
+                            </ListBox.InputBindings>
+
                             <ListBox.Style>
                                 <Style TargetType="ListBox">
                                     <Setter Property="Visibility"
@@ -183,7 +191,34 @@
 
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Margin="4,6">
+
+
+                                    <Grid Margin="4,6"
+      Background="Transparent"
+      Tag="{Binding DataContext.RemoveSourceCommand,
+                    RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+      PreviewMouseRightButtonDown="ArchiveSourceCard_PreviewMouseRightButtonDown">
+
+
+                                        <Grid.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="Удалить источник из приложения…"
+                  Foreground="#B91C1C"
+                  Command="{Binding PlacementTarget.Tag,
+                                    RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
+                  CommandParameter="{Binding PlacementTarget.DataContext,
+                                             RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}">
+                                                    <MenuItem.Icon>
+                                                        <materialDesign:PackIcon Width="16"
+                                         Height="16"
+                                         Foreground="#B91C1C"
+                                         Kind="Delete"/>
+                                                    </MenuItem.Icon>
+                                                </MenuItem>
+                                            </ContextMenu>
+                                        </Grid.ContextMenu>
+
+
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
