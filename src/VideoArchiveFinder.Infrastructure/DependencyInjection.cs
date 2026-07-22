@@ -16,6 +16,14 @@ public static class DependencyInjection
             LocalApplicationDataDirectoryProvider>();
 
         services.AddSingleton<
+            IArchivePathProbe,
+            SystemArchivePathProbe>();
+
+        services.AddSingleton<
+            IArchiveSourceAvailabilityChecker,
+            ArchiveSourceAvailabilityChecker>();
+
+        services.AddSingleton<
             IArchiveSourceStore,
             JsonArchiveSourceStore>();
 

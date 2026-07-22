@@ -4,12 +4,15 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using VideoArchiveFinder.Application.ArchiveSources;
 using VideoArchiveFinder.Desktop.Services;
+using VideoArchiveFinder.Domain.ArchiveSources;
 
 namespace VideoArchiveFinder.Desktop.ViewModels;
 
 public partial class MainWindowViewModel : ObservableObject
 {
     private readonly IArchiveSourceService _archiveSourceService;
+    private readonly IArchiveSourceAvailabilityChecker
+        _archiveSourceAvailabilityChecker;
     private readonly ILocalFolderPicker _localFolderPicker;
     private readonly IUncPathInputDialog _uncPathInputDialog;
     private readonly ILogger<MainWindowViewModel> _logger;
@@ -35,11 +38,14 @@ public partial class MainWindowViewModel : ObservableObject
 
     public MainWindowViewModel(
         IArchiveSourceService archiveSourceService,
+        IArchiveSourceAvailabilityChecker archiveSourceAvailabilityChecker,
         ILocalFolderPicker localFolderPicker,
-        IUncPathInputDialog uncPathInputDialog,
+            IUncPathInputDialog uncPathInputDialog,
         ILogger<MainWindowViewModel> logger)
     {
         _archiveSourceService = archiveSourceService;
+        _archiveSourceAvailabilityChecker =
+            archiveSourceAvailabilityChecker;
         _localFolderPicker = localFolderPicker;
         _uncPathInputDialog = uncPathInputDialog;
         _logger = logger;
@@ -69,7 +75,7 @@ public partial class MainWindowViewModel : ObservableObject
                 source => source.DisplayName,
                 StringComparer.CurrentCultureIgnoreCase))
             {
-                Sources.Add(new ArchiveSourceItemViewModel(source));
+                Sources.Add(CreateSourceItem(source));
             }
 
             HasSources = Sources.Count > 0;
@@ -179,7 +185,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
 
         InsertSourceInDisplayOrder(
-            new ArchiveSourceItemViewModel(result.Source));
+            CreateSourceItem(result.Source));
 
         HasSources = true;
         StatusText =
@@ -219,5 +225,38 @@ public partial class MainWindowViewModel : ObservableObject
         Sources.Insert(
             insertionIndex,
             newSource);
+    }
+    private ArchiveSourceItemViewModel CreateSourceItem(
+        ArchiveSource source)
+    {
+        var sourceItem = new ArchiveSourceItemViewModel(source);
+
+        _ = CheckSourceAvailabilityAsync(sourceItem);
+
+        return sourceItem;
+    }
+
+    private async Task CheckSourceAvailabilityAsync(
+        ArchiveSourceItemViewModel sourceItem)
+    {
+        sourceItem.Availability =
+            ArchiveSourceAvailability.Checking;
+
+        try
+        {
+            sourceItem.Availability =
+                await _archiveSourceAvailabilityChecker.CheckAsync(
+                    sourceItem.FullPath);
+        }
+        catch (Exception exception)
+        {
+            sourceItem.Availability =
+                ArchiveSourceAvailability.Unavailable;
+
+            _logger.LogWarning(
+                exception,
+                "Failed to check availability of archive source {SourceId}.",
+                sourceItem.Id);
+        }
     }
 }
