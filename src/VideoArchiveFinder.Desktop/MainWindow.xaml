@@ -67,40 +67,32 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-<Grid Grid.Row="0"
-      Margin="0,0,0,12">
-    <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="Auto"/>
-    </Grid.ColumnDefinitions>
+                    <Grid Grid.Row="0"
+                          Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
-                        <Grid Grid.Row="0"
-      Margin="0,0,0,12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                                   VerticalAlignment="Center"
+                                   FontSize="17"
+                                   FontWeight="SemiBold"
+                                   Text="Источники"/>
 
-                            <TextBlock Grid.Column="0"
-               VerticalAlignment="Center"
-               FontSize="17"
-               FontWeight="SemiBold"
-               Text="Источники"/>
+                        <Button Grid.Column="1"
+                                Width="32"
+                                Height="32"
+                                Padding="4"
+                                Command="{Binding AddLocalFolderCommand}"
+                                ToolTip="Добавить локальную папку"
+                                AutomationProperties.Name="Добавить локальную папку">
+                            <materialDesign:PackIcon Width="19"
+                                                     Height="19"
+                                                     Kind="FolderPlus"/>
+                        </Button>
+                    </Grid>
 
-                            <Button Grid.Column="1"
-            Width="32"
-            Height="32"
-            Padding="4"
-            Command="{Binding AddLocalFolderCommand}"
-            ToolTip="Добавить локальную папку"
-            AutomationProperties.Name="Добавить локальную папку">
-                                <materialDesign:PackIcon Width="19"
-                                 Height="19"
-                                 Kind="FolderPlus"/>
-                            </Button>
-                        </Grid>
-
-</Grid>
 
 
                     <Grid Grid.Row="1">
