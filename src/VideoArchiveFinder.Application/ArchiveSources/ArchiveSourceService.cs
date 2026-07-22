@@ -78,14 +78,33 @@ public sealed class ArchiveSourceService :
         }
     }
 
-    public async Task<bool> RemoveAsync(
+    public Task<bool> RemoveAsync(
         Guid sourceId,
         CancellationToken cancellationToken = default)
     {
         if (sourceId == Guid.Empty)
         {
+            return Task.FromResult(false);
+        }
+
+        return RemoveManyAsync(
+            [sourceId],
+            cancellationToken);
+    }
+
+    public async Task<bool> RemoveManyAsync(
+        IReadOnlyCollection<Guid> sourceIds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sourceIds);
+
+        if (sourceIds.Count == 0 ||
+            sourceIds.Any(sourceId => sourceId == Guid.Empty))
+        {
             return false;
         }
+
+        var sourceIdsToRemove = sourceIds.ToHashSet();
 
         await _accessLock.WaitAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -96,13 +115,17 @@ public sealed class ArchiveSourceService :
                     .ConfigureAwait(false))
                 .ToList();
 
-            var removedCount = sources.RemoveAll(
-                source => source.Id == sourceId);
+            var existingSourceIds = sources
+                .Select(source => source.Id)
+                .ToHashSet();
 
-            if (removedCount == 0)
+            if (!sourceIdsToRemove.IsSubsetOf(existingSourceIds))
             {
                 return false;
             }
+
+            sources.RemoveAll(
+                source => sourceIdsToRemove.Contains(source.Id));
 
             await _store.SaveAsync(
                     sources,

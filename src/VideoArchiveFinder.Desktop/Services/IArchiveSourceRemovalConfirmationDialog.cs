@@ -3,6 +3,7 @@
 public interface IArchiveSourceRemovalConfirmationDialog
 {
     bool ConfirmRemoval(
-        string displayName,
-        string fullPath);
+        int sourceCount,
+        string? singleSourceDisplayName = null,
+        string? singleSourceFullPath = null);
 }

@@ -25,20 +25,17 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(AddLocalFolderCommand))]
     [NotifyCanExecuteChangedFor(nameof(AddUncPathCommand))]
-    [NotifyCanExecuteChangedFor(nameof(RemoveSourceCommand))]
     private bool _isLoadingSources;
 
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(AddLocalFolderCommand))]
     [NotifyCanExecuteChangedFor(nameof(AddUncPathCommand))]
-    [NotifyCanExecuteChangedFor(nameof(RemoveSourceCommand))]
     private bool _isAddingSource;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(AddLocalFolderCommand))]
     [NotifyCanExecuteChangedFor(nameof(AddUncPathCommand))]
-    [NotifyCanExecuteChangedFor(nameof(RemoveSourceCommand))]
     private bool _isRemovingSource;
 
 
@@ -188,83 +185,114 @@ public partial class MainWindowViewModel : ObservableObject
                !IsRemovingSource;
     }
 
-    private bool CanRemoveSource(
-        ArchiveSourceItemViewModel? source)
+    public async Task RemoveSourcesAsync(
+        IReadOnlyCollection<ArchiveSourceItemViewModel> selectedSources)
     {
-        return source is not null &&
-               !IsLoadingSources &&
-               !IsAddingSource &&
-               !IsRemovingSource;
-    }
+        ArgumentNullException.ThrowIfNull(selectedSources);
 
-    [RelayCommand(CanExecute = nameof(CanRemoveSource))]
-    private async Task RemoveSourceAsync(
-        ArchiveSourceItemViewModel? source)
-    {
-        if (source is null)
+        if (selectedSources.Count == 0 ||
+            IsLoadingSources ||
+            IsAddingSource ||
+            IsRemovingSource)
         {
             return;
         }
 
+        var sourcesToRemove = selectedSources
+            .Where(selectedSource =>
+                Sources.Any(source => source.Id == selectedSource.Id))
+            .DistinctBy(source => source.Id)
+            .ToList();
+
+        if (sourcesToRemove.Count == 0)
+        {
+            return;
+        }
+
+        var singleSource = sourcesToRemove.Count == 1
+            ? sourcesToRemove[0]
+            : null;
+
         var removalConfirmed =
             _archiveSourceRemovalConfirmationDialog.ConfirmRemoval(
-                source.DisplayName,
-                source.FullPath);
+                sourcesToRemove.Count,
+                singleSource?.DisplayName,
+                singleSource?.FullPath);
 
         if (!removalConfirmed)
         {
-            StatusText = "Удаление источника отменено";
+            StatusText = sourcesToRemove.Count == 1
+                ? "Удаление источника отменено"
+                : "Удаление выбранных источников отменено";
+
             return;
         }
 
         IsRemovingSource = true;
-        StatusText =
-            $"Удаление источника «{source.DisplayName}» из приложения...";
+
+        StatusText = sourcesToRemove.Count == 1
+            ? $"Удаление источника «{singleSource!.DisplayName}» из приложения..."
+            : $"Удаление источников из приложения: {sourcesToRemove.Count}...";
 
         try
         {
-            var wasRemoved =
-                await _archiveSourceService.RemoveAsync(source.Id);
+            var sourceIds = sourcesToRemove
+                .Select(source => source.Id)
+                .ToArray();
 
-            if (!wasRemoved)
+            var wereRemoved =
+                await _archiveSourceService.RemoveManyAsync(sourceIds);
+
+            if (!wereRemoved)
             {
                 StatusText =
-                    "Источник уже отсутствует в настройках приложения";
+                    "Не удалось удалить источники: список источников изменился";
 
                 _logger.LogWarning(
-                    "Archive source {SourceId} was not found during removal.",
-                    source.Id);
+                    "One or more archive sources were not found during batch removal.");
 
                 return;
             }
 
-            Sources.Remove(source);
+            foreach (var source in sourcesToRemove)
+            {
+                Sources.Remove(source);
+            }
+
             HasSources = Sources.Count > 0;
 
-            StatusText = HasSources
-                ? $"Источник «{source.DisplayName}» удалён только из приложения"
-                : "Источник удалён только из приложения. " +
-                  "Папки и файлы на диске не изменены.";
+            StatusText = sourcesToRemove.Count == 1
+                ? HasSources
+                    ? $"Источник «{singleSource!.DisplayName}» удалён только из приложения"
+                    : "Источник удалён только из приложения. " +
+                      "Папки и файлы на диске не изменены."
+                : HasSources
+                    ? $"Источники удалены только из приложения: {sourcesToRemove.Count}"
+                    : $"Источники удалены только из приложения: {sourcesToRemove.Count}. " +
+                      "Папки и файлы на диске не изменены.";
 
             _logger.LogInformation(
-                "Archive source {SourceId} was removed from the application.",
-                source.Id);
+                "Removed {SourceCount} archive sources from the application.",
+                sourcesToRemove.Count);
         }
         catch (Exception exception)
         {
-            StatusText =
-                "Не удалось удалить источник из приложения";
+            StatusText = sourcesToRemove.Count == 1
+                ? "Не удалось удалить источник из приложения"
+                : "Не удалось удалить выбранные источники из приложения";
 
             _logger.LogError(
                 exception,
-                "Archive source {SourceId} could not be removed.",
-                source.Id);
+                "Could not remove {SourceCount} archive sources.",
+                sourcesToRemove.Count);
         }
         finally
         {
             IsRemovingSource = false;
         }
     }
+
+
 
 
     private async Task AddSourceAsync(string fullPath)

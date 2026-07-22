@@ -131,6 +131,76 @@ public sealed class ArchiveSourceServiceTests
         Assert.Equal(1, store.SaveCallCount);
     }
 
+    [Fact]
+    public async Task RemoveManyAsync_ExistingSources_RemovesAllAndSavesOnce()
+    {
+        var firstSource = ArchiveSource.Create(
+            @"C:\First Archive");
+
+        var secondSource = ArchiveSource.Create(
+            @"D:\Second Archive");
+
+        var preservedSource = ArchiveSource.Create(
+            @"E:\Preserved Archive");
+
+        var store = new TestArchiveSourceStore(
+            firstSource,
+            secondSource,
+            preservedSource);
+
+        using var service = new ArchiveSourceService(store);
+
+        var wereRemoved = await service.RemoveManyAsync(
+            [firstSource.Id, secondSource.Id]);
+
+        Assert.True(wereRemoved);
+        Assert.Single(store.Sources);
+        Assert.Equal(preservedSource, store.Sources[0]);
+        Assert.Equal(1, store.SaveCallCount);
+    }
+
+    [Fact]
+    public async Task RemoveManyAsync_UnknownSource_PreservesAllAndDoesNotSave()
+    {
+        var firstSource = ArchiveSource.Create(
+            @"C:\First Archive");
+
+        var secondSource = ArchiveSource.Create(
+            @"D:\Second Archive");
+
+        var store = new TestArchiveSourceStore(
+            firstSource,
+            secondSource);
+
+        using var service = new ArchiveSourceService(store);
+
+        var wereRemoved = await service.RemoveManyAsync(
+            [firstSource.Id, Guid.NewGuid()]);
+
+        Assert.False(wereRemoved);
+        Assert.Equal(2, store.Sources.Count);
+        Assert.Contains(firstSource, store.Sources);
+        Assert.Contains(secondSource, store.Sources);
+        Assert.Equal(0, store.SaveCallCount);
+    }
+
+    [Fact]
+    public async Task RemoveManyAsync_EmptySelection_DoesNotSave()
+    {
+        var source = ArchiveSource.Create(
+            @"C:\Video Archive");
+
+        var store = new TestArchiveSourceStore(source);
+        using var service = new ArchiveSourceService(store);
+
+        var wereRemoved = await service.RemoveManyAsync([]);
+
+        Assert.False(wereRemoved);
+        Assert.Single(store.Sources);
+        Assert.Equal(0, store.SaveCallCount);
+    }
+
+
     private sealed class TestArchiveSourceStore(
         params ArchiveSource[] initialSources)
         : IArchiveSourceStore

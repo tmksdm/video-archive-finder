@@ -15,4 +15,8 @@ public interface IArchiveSourceService
     Task<bool> RemoveAsync(
         Guid sourceId,
         CancellationToken cancellationToken = default);
+
+    Task<bool> RemoveManyAsync(
+        IReadOnlyCollection<Guid> sourceIds,
+        CancellationToken cancellationToken = default);
 }
