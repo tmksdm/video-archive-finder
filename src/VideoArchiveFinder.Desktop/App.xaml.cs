@@ -4,6 +4,7 @@ using Serilog;
 using System.IO;
 using VideoArchiveFinder.Desktop.ViewModels;
 using VideoArchiveFinder.Infrastructure;
+using VideoArchiveFinder.Desktop.Services;
 
 namespace VideoArchiveFinder.Desktop;
 
@@ -36,6 +37,7 @@ public partial class App : System.Windows.Application
             .ConfigureServices(services =>
             {
                 services.AddVideoArchiveFinderInfrastructure();
+                services.AddSingleton<ILocalFolderPicker, WindowsLocalFolderPicker>();
                 services.AddSingleton<MainWindowViewModel>();
                 services.AddSingleton<MainWindow>();
             })
