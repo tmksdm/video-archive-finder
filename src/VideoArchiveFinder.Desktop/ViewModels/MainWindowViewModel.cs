@@ -11,6 +11,7 @@ public partial class MainWindowViewModel : ObservableObject
 {
     private readonly IArchiveSourceService _archiveSourceService;
     private readonly ILocalFolderPicker _localFolderPicker;
+    private readonly IUncPathInputDialog _uncPathInputDialog;
     private readonly ILogger<MainWindowViewModel> _logger;
 
     [ObservableProperty]
@@ -18,10 +19,12 @@ public partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(AddLocalFolderCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AddUncPathCommand))]
     private bool _isLoadingSources;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(AddLocalFolderCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AddUncPathCommand))]
     private bool _isAddingSource;
 
     [ObservableProperty]
@@ -33,10 +36,12 @@ public partial class MainWindowViewModel : ObservableObject
     public MainWindowViewModel(
         IArchiveSourceService archiveSourceService,
         ILocalFolderPicker localFolderPicker,
+        IUncPathInputDialog uncPathInputDialog,
         ILogger<MainWindowViewModel> logger)
     {
         _archiveSourceService = archiveSourceService;
         _localFolderPicker = localFolderPicker;
+        _uncPathInputDialog = uncPathInputDialog;
         _logger = logger;
     }
 
@@ -97,7 +102,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    [RelayCommand(CanExecute = nameof(CanAddLocalFolder))]
+    [RelayCommand(CanExecute = nameof(CanAddSource))]
     private async Task AddLocalFolderAsync()
     {
         IsAddingSource = true;
@@ -111,38 +116,13 @@ public partial class MainWindowViewModel : ObservableObject
                 return;
             }
 
-            StatusText = "Добавление источника архива...";
-
-            var result = await _archiveSourceService.AddAsync(
-                selectedPath);
-
-            if (!result.WasAdded)
-            {
-                StatusText =
-                    $"Источник «{result.Source.DisplayName}» уже добавлен";
-
-                return;
-            }
-
-            InsertSourceInDisplayOrder(
-                new ArchiveSourceItemViewModel(result.Source));
-
-            HasSources = true;
-            StatusText =
-                $"Источник «{result.Source.DisplayName}» добавлен";
-
-            _logger.LogInformation(
-                "Archive source {SourceId} was added from {SourcePath}.",
-                result.Source.Id,
-                result.Source.FullPath);
+            await AddSourceAsync(selectedPath);
         }
         catch (Exception exception)
         {
-            StatusText = "Не удалось добавить источник архива";
-
-            _logger.LogError(
+            HandleAddSourceError(
                 exception,
-                "Archive source could not be added.");
+                "Local archive source could not be added.");
         }
         finally
         {
@@ -150,10 +130,76 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    private bool CanAddLocalFolder()
+    [RelayCommand(CanExecute = nameof(CanAddSource))]
+    private async Task AddUncPathAsync()
+    {
+        IsAddingSource = true;
+
+        try
+        {
+            var enteredPath = _uncPathInputDialog.ShowDialog();
+
+            if (string.IsNullOrWhiteSpace(enteredPath))
+            {
+                return;
+            }
+
+            await AddSourceAsync(enteredPath);
+        }
+        catch (Exception exception)
+        {
+            HandleAddSourceError(
+                exception,
+                "UNC archive source could not be added.");
+        }
+        finally
+        {
+            IsAddingSource = false;
+        }
+    }
+
+    private bool CanAddSource()
     {
         return !IsLoadingSources &&
                !IsAddingSource;
+    }
+
+    private async Task AddSourceAsync(string fullPath)
+    {
+        StatusText = "Добавление источника архива...";
+
+        var result = await _archiveSourceService.AddAsync(fullPath);
+
+        if (!result.WasAdded)
+        {
+            StatusText =
+                $"Источник «{result.Source.DisplayName}» уже добавлен";
+
+            return;
+        }
+
+        InsertSourceInDisplayOrder(
+            new ArchiveSourceItemViewModel(result.Source));
+
+        HasSources = true;
+        StatusText =
+            $"Источник «{result.Source.DisplayName}» добавлен";
+
+        _logger.LogInformation(
+            "Archive source {SourceId} was added from {SourcePath}.",
+            result.Source.Id,
+            result.Source.FullPath);
+    }
+
+    private void HandleAddSourceError(
+        Exception exception,
+        string logMessage)
+    {
+        StatusText = "Не удалось добавить источник архива";
+
+        _logger.LogError(
+            exception,
+            logMessage);
     }
 
     private void InsertSourceInDisplayOrder(

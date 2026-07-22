@@ -68,30 +68,45 @@
                     </Grid.RowDefinitions>
 
                     <Grid Grid.Row="0"
-                          Margin="0,0,0,12">
+      Margin="0,0,0,12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
                         <TextBlock Grid.Column="0"
-                                   VerticalAlignment="Center"
-                                   FontSize="17"
-                                   FontWeight="SemiBold"
-                                   Text="Источники"/>
+               VerticalAlignment="Center"
+               FontSize="17"
+               FontWeight="SemiBold"
+               Text="Источники"/>
 
                         <Button Grid.Column="1"
-                                Width="32"
-                                Height="32"
-                                Padding="4"
-                                Command="{Binding AddLocalFolderCommand}"
-                                ToolTip="Добавить локальную папку"
-                                AutomationProperties.Name="Добавить локальную папку">
+            Width="32"
+            Height="32"
+            Padding="4"
+            Command="{Binding AddLocalFolderCommand}"
+            ToolTip="Добавить локальную папку"
+            AutomationProperties.Name="Добавить локальную папку">
                             <materialDesign:PackIcon Width="19"
-                                                     Height="19"
-                                                     Kind="FolderPlus"/>
+                                 Height="19"
+                                 Kind="FolderPlus"/>
+                        </Button>
+
+                        <Button Grid.Column="2"
+            Width="32"
+            Height="32"
+            Margin="4,0,0,0"
+            Padding="4"
+            Command="{Binding AddUncPathCommand}"
+            ToolTip="Добавить сетевой UNC-путь"
+            AutomationProperties.Name="Добавить сетевой UNC-путь">
+                            <materialDesign:PackIcon Width="19"
+                                 Height="19"
+                                 Kind="Lan"/>
                         </Button>
                     </Grid>
+
 
 
 

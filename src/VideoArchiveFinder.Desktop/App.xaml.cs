@@ -38,6 +38,9 @@ public partial class App : System.Windows.Application
             {
                 services.AddVideoArchiveFinderInfrastructure();
                 services.AddSingleton<ILocalFolderPicker, WindowsLocalFolderPicker>();
+                services.AddSingleton<
+                    IUncPathInputDialog,
+                    WindowsUncPathInputDialog>();
                 services.AddSingleton<MainWindowViewModel>();
                 services.AddSingleton<MainWindow>();
             })
