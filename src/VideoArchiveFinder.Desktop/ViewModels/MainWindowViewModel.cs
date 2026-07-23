@@ -12,6 +12,7 @@ public partial class MainWindowViewModel : ObservableObject
 {
     private readonly IArchiveSourceService _archiveSourceService;
     private readonly IWindowsShellService _windowsShellService;
+    private readonly IClipboardService _clipboardService;
     private readonly IArchiveSourceAvailabilityChecker
         _archiveSourceAvailabilityChecker;
     private readonly ILocalFolderPicker _localFolderPicker;
@@ -49,6 +50,7 @@ public partial class MainWindowViewModel : ObservableObject
     public MainWindowViewModel(
         IArchiveSourceService archiveSourceService,
         IWindowsShellService windowsShellService,
+        IClipboardService clipboardService,
         IArchiveSourceAvailabilityChecker archiveSourceAvailabilityChecker,
         ILocalFolderPicker localFolderPicker,
         IUncPathInputDialog uncPathInputDialog,
@@ -58,6 +60,7 @@ public partial class MainWindowViewModel : ObservableObject
     {
         _archiveSourceService = archiveSourceService;
         _windowsShellService = windowsShellService;
+        _clipboardService = clipboardService;
         _archiveSourceAvailabilityChecker =
             archiveSourceAvailabilityChecker;
         _localFolderPicker = localFolderPicker;
@@ -212,6 +215,45 @@ public partial class MainWindowViewModel : ObservableObject
                 "Could not open archive source {SourceId} in Windows Explorer.",
                 source.Id);
         }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanCopyArchiveSourcePath))]
+    private void CopyArchiveSourcePath(
+        ArchiveSourceItemViewModel? source)
+    {
+        if (!CanCopyArchiveSourcePath(source))
+        {
+            StatusText = "Не удалось определить путь источника";
+            return;
+        }
+
+        try
+        {
+            _clipboardService.SetText(source!.FullPath);
+
+            StatusText =
+                $"Путь источника «{source.DisplayName}» скопирован";
+
+            _logger.LogInformation(
+                "Copied archive source {SourceId} path to the clipboard.",
+                source.Id);
+        }
+        catch (Exception exception)
+        {
+            StatusText =
+                $"Не удалось скопировать путь источника «{source!.DisplayName}»";
+
+            _logger.LogError(
+                exception,
+                "Could not copy archive source {SourceId} path to the clipboard.",
+                source.Id);
+        }
+    }
+
+    private static bool CanCopyArchiveSourcePath(
+        ArchiveSourceItemViewModel? source)
+    {
+        return !string.IsNullOrWhiteSpace(source?.FullPath);
     }
 
     private static bool CanOpenArchiveSource(
