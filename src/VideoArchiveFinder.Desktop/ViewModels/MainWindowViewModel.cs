@@ -11,6 +11,7 @@ namespace VideoArchiveFinder.Desktop.ViewModels;
 public partial class MainWindowViewModel : ObservableObject
 {
     private readonly IArchiveSourceService _archiveSourceService;
+    private readonly IWindowsShellService _windowsShellService;
     private readonly IArchiveSourceAvailabilityChecker
         _archiveSourceAvailabilityChecker;
     private readonly ILocalFolderPicker _localFolderPicker;
@@ -47,6 +48,7 @@ public partial class MainWindowViewModel : ObservableObject
 
     public MainWindowViewModel(
         IArchiveSourceService archiveSourceService,
+        IWindowsShellService windowsShellService,
         IArchiveSourceAvailabilityChecker archiveSourceAvailabilityChecker,
         ILocalFolderPicker localFolderPicker,
         IUncPathInputDialog uncPathInputDialog,
@@ -55,6 +57,7 @@ public partial class MainWindowViewModel : ObservableObject
         ILogger<MainWindowViewModel> logger)
     {
         _archiveSourceService = archiveSourceService;
+        _windowsShellService = windowsShellService;
         _archiveSourceAvailabilityChecker =
             archiveSourceAvailabilityChecker;
         _localFolderPicker = localFolderPicker;
@@ -176,6 +179,46 @@ public partial class MainWindowViewModel : ObservableObject
         {
             IsAddingSource = false;
         }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanOpenArchiveSource))]
+    private void OpenArchiveSource(
+        ArchiveSourceItemViewModel? source)
+    {
+        if (!CanOpenArchiveSource(source))
+        {
+            StatusText = "Источник сейчас недоступен";
+            return;
+        }
+
+        try
+        {
+            _windowsShellService.OpenFolder(source!.FullPath);
+
+            StatusText =
+                $"Источник «{source.DisplayName}» открыт в Проводнике";
+
+            _logger.LogInformation(
+                "Opened archive source {SourceId} in Windows Explorer.",
+                source.Id);
+        }
+        catch (Exception exception)
+        {
+            StatusText =
+                $"Не удалось открыть источник «{source!.DisplayName}»";
+
+            _logger.LogError(
+                exception,
+                "Could not open archive source {SourceId} in Windows Explorer.",
+                source.Id);
+        }
+    }
+
+    private static bool CanOpenArchiveSource(
+        ArchiveSourceItemViewModel? source)
+    {
+        return source?.Availability ==
+               ArchiveSourceAvailability.Available;
     }
 
     private bool CanAddSource()
@@ -367,6 +410,8 @@ public partial class MainWindowViewModel : ObservableObject
         sourceItem.Availability =
             ArchiveSourceAvailability.Checking;
 
+        OpenArchiveSourceCommand.NotifyCanExecuteChanged();
+
         try
         {
             sourceItem.Availability =
@@ -383,5 +428,10 @@ public partial class MainWindowViewModel : ObservableObject
                 "Failed to check availability of archive source {SourceId}.",
                 sourceItem.Id);
         }
+        finally
+        {
+            OpenArchiveSourceCommand.NotifyCanExecuteChanged();
+        }
     }
+
 }

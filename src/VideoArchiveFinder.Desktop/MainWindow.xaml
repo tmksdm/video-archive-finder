@@ -191,15 +191,31 @@
 
                                     <Grid Margin="4,6"
       Background="Transparent"
+      Tag="{Binding DataContext,
+                    RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
       PreviewMouseRightButtonDown="ArchiveSourceCard_PreviewMouseRightButtonDown">
+
 
 
                                         <Grid.ContextMenu>
                                             <ContextMenu>
-                                                <MenuItem Header="Удалить выбранные источники из приложения…"
-          Foreground="#B91C1C"
-          Click="RemoveSelectedArchiveSources_Click">
+                                                <MenuItem Header="Открыть в Проводнике"
+                  Command="{Binding PlacementTarget.Tag.OpenArchiveSourceCommand,
+                                    RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
+                  CommandParameter="{Binding PlacementTarget.DataContext,
+                                             RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}">
+                                                    <MenuItem.Icon>
+                                                        <materialDesign:PackIcon Width="16"
+                                         Height="16"
+                                         Kind="FolderOpen"/>
+                                                    </MenuItem.Icon>
+                                                </MenuItem>
 
+                                                <Separator/>
+
+                                                <MenuItem Header="Удалить выбранные источники из приложения…"
+                  Foreground="#B91C1C"
+                  Click="RemoveSelectedArchiveSources_Click">
                                                     <MenuItem.Icon>
                                                         <materialDesign:PackIcon Width="16"
                                          Height="16"
@@ -209,6 +225,7 @@
                                                 </MenuItem>
                                             </ContextMenu>
                                         </Grid.ContextMenu>
+
 
 
                                         <Grid.RowDefinitions>
