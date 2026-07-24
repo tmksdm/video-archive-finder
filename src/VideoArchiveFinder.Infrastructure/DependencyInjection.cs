@@ -1,7 +1,9 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using VideoArchiveFinder.Application.ArchiveSources;
+using VideoArchiveFinder.Application.Indexing;
 using VideoArchiveFinder.Application.Storage;
 using VideoArchiveFinder.Infrastructure.ArchiveSources;
+using VideoArchiveFinder.Infrastructure.Indexing;
 using VideoArchiveFinder.Infrastructure.Storage;
 
 namespace VideoArchiveFinder.Infrastructure;
@@ -14,6 +16,12 @@ public static class DependencyInjection
         services.AddSingleton<
             IApplicationDataDirectoryProvider,
             LocalApplicationDataDirectoryProvider>();
+
+        services.AddSingleton<IndexDatabasePathProvider>();
+
+        services.AddSingleton<
+            IIndexDatabaseInitializer,
+            SqliteIndexDatabaseInitializer>();
 
         services.AddSingleton<
             IArchivePathProbe,

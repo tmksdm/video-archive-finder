@@ -5,6 +5,7 @@ using System.IO;
 using VideoArchiveFinder.Desktop.ViewModels;
 using VideoArchiveFinder.Infrastructure;
 using VideoArchiveFinder.Desktop.Services;
+using VideoArchiveFinder.Application.Indexing;
 
 namespace VideoArchiveFinder.Desktop;
 
@@ -52,6 +53,11 @@ public partial class App : System.Windows.Application
             .Build();
 
         await _host.StartAsync();
+
+        var indexDatabaseInitializer =
+            _host.Services.GetRequiredService<IIndexDatabaseInitializer>();
+
+        await indexDatabaseInitializer.InitializeAsync();
 
         var viewModel =
             _host.Services.GetRequiredService<MainWindowViewModel>();
