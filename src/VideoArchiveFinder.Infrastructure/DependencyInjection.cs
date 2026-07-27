@@ -24,6 +24,10 @@ public static class DependencyInjection
             SqliteIndexDatabaseInitializer>();
 
         services.AddSingleton<
+            IFolderIndexRepository,
+            SqliteFolderIndexRepository>();
+
+        services.AddSingleton<
             IArchivePathProbe,
             SystemArchivePathProbe>();
 
