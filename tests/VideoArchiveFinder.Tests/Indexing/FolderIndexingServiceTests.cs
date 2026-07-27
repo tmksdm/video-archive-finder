@@ -115,6 +115,14 @@ public sealed class FolderIndexingServiceTests
         Assert.Equal(
             FolderIndexingStage.Completed,
             progress.Reports[^1].Stage);
+
+        var completion =
+            Assert.Single(repository.Completions);
+
+        Assert.Equal(source.Id, completion.RootSourceId);
+        Assert.Contains(
+            @"C:\Archive\Закрытая папка",
+            completion.ProtectedPaths);
     }
 
     [Fact]
@@ -156,6 +164,7 @@ public sealed class FolderIndexingServiceTests
         Assert.Equal(2, repository.Batches.Count);
         Assert.Equal(250, repository.Batches[0].Count);
         Assert.Single(repository.Batches[1]);
+        Assert.Single(repository.Completions);
     }
 
     [Fact]
@@ -188,6 +197,7 @@ public sealed class FolderIndexingServiceTests
                 () => scanningTask);
 
         Assert.Empty(repository.Batches);
+        Assert.Empty(repository.Completions);
     }
 
     private static FolderIndexingService CreateService(
@@ -256,6 +266,10 @@ public sealed class FolderIndexingServiceTests
             Batches
         { get; } = [];
 
+        public List<ScanCompletion>
+            Completions
+        { get; } = [];
+
         public Task UpsertBatchAsync(
             IReadOnlyCollection<
                 FolderIndexUpsertItem> folders,
@@ -269,6 +283,24 @@ public sealed class FolderIndexingServiceTests
             return Task.CompletedTask;
         }
 
+        public Task<int> CompleteScanAsync(
+            Guid rootSourceId,
+            DateTimeOffset scanStartedAtUtc,
+            IReadOnlyCollection<string> protectedPaths,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken
+                .ThrowIfCancellationRequested();
+
+            Completions.Add(
+                new ScanCompletion(
+                    rootSourceId,
+                    scanStartedAtUtc,
+                    protectedPaths.ToArray()));
+
+            return Task.FromResult(0);
+        }
+
         public Task<IReadOnlyList<IndexedFolder>>
             GetByRootSourceIdAsync(
                 Guid rootSourceId,
@@ -278,6 +310,11 @@ public sealed class FolderIndexingServiceTests
                 IReadOnlyList<IndexedFolder>>([]);
         }
     }
+
+    private sealed record ScanCompletion(
+        Guid RootSourceId,
+        DateTimeOffset ScanStartedAtUtc,
+        IReadOnlyList<string> ProtectedPaths);
 
     private sealed class RecordingProgress
         : IProgress<FolderIndexingProgress>

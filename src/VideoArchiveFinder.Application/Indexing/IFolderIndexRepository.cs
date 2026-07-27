@@ -6,6 +6,12 @@ public interface IFolderIndexRepository
         IReadOnlyCollection<FolderIndexUpsertItem> folders,
         CancellationToken cancellationToken = default);
 
+    Task<int> CompleteScanAsync(
+        Guid rootSourceId,
+        DateTimeOffset scanStartedAtUtc,
+        IReadOnlyCollection<string> protectedPaths,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<IndexedFolder>> GetByRootSourceIdAsync(
         Guid rootSourceId,
         CancellationToken cancellationToken = default);

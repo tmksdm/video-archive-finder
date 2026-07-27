@@ -99,6 +99,255 @@ public sealed class SqliteFolderIndexRepository
         }
     }
 
+    public async Task<int> CompleteScanAsync(
+        Guid rootSourceId,
+        DateTimeOffset scanStartedAtUtc,
+        IReadOnlyCollection<string> protectedPaths,
+        CancellationToken cancellationToken = default)
+    {
+        if (rootSourceId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Root source identifier cannot be empty.",
+                nameof(rootSourceId));
+        }
+
+        ArgumentNullException.ThrowIfNull(protectedPaths);
+
+        var normalizedProtectedPaths =
+            new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+
+        foreach (var protectedPath in protectedPaths)
+        {
+            if (string.IsNullOrWhiteSpace(protectedPath))
+            {
+                throw new ArgumentException(
+                    "Protected paths cannot contain an empty path.",
+                    nameof(protectedPaths));
+            }
+
+            normalizedProtectedPaths.Add(
+                protectedPath.Trim());
+        }
+
+        await using var connection = CreateConnection();
+
+        await connection
+            .OpenAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        await ConfigureConnectionAsync(
+                connection,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        await using var transaction = connection.BeginTransaction();
+
+        try
+        {
+            var staleFolders =
+                new List<(long Id, string FullPath)>();
+
+            await using (var selectCommand =
+                connection.CreateCommand())
+            {
+                selectCommand.Transaction = transaction;
+
+                selectCommand.CommandText =
+                    """
+    SELECT Id, FullPath
+    FROM Folders
+    WHERE RootSourceId = $rootSourceId
+      AND julianday(LastSeenUtc) <
+          julianday($scanStartedAtUtc)
+    ORDER BY Id;
+    """;
+
+
+                selectCommand.Parameters.AddWithValue(
+                    "$rootSourceId",
+                    rootSourceId.ToString("D"));
+
+                selectCommand.Parameters.AddWithValue(
+                    "$scanStartedAtUtc",
+                    scanStartedAtUtc
+                        .ToUniversalTime()
+                        .ToString(
+                            "O",
+                            CultureInfo.InvariantCulture));
+
+                await using var reader =
+                    await selectCommand
+                        .ExecuteReaderAsync(cancellationToken)
+                        .ConfigureAwait(false);
+
+                while (await reader
+                    .ReadAsync(cancellationToken)
+                    .ConfigureAwait(false))
+                {
+                    staleFolders.Add(
+                        (
+                            reader.GetInt64(0),
+                            reader.GetString(1)
+                        ));
+                }
+            }
+
+            var folderIdsToDelete =
+                staleFolders
+                    .Where(
+                        folder =>
+                            !IsRelatedToProtectedPath(
+                                folder.FullPath,
+                                normalizedProtectedPaths))
+                    .Select(folder => folder.Id)
+                    .ToArray();
+
+            const int deleteBatchSize = 250;
+
+            for (var offset = 0;
+                 offset < folderIdsToDelete.Length;
+                 offset += deleteBatchSize)
+            {
+                cancellationToken
+                    .ThrowIfCancellationRequested();
+
+                var currentBatch =
+                    folderIdsToDelete
+                        .Skip(offset)
+                        .Take(deleteBatchSize)
+                        .ToArray();
+
+                await using var deleteCommand =
+                    connection.CreateCommand();
+
+                deleteCommand.Transaction = transaction;
+
+                var parameterNames =
+                    new string[currentBatch.Length];
+
+                for (var index = 0;
+                     index < currentBatch.Length;
+                     index++)
+                {
+                    var parameterName =
+                        $"$folderId{index}";
+
+                    parameterNames[index] =
+                        parameterName;
+
+                    deleteCommand.Parameters.AddWithValue(
+                        parameterName,
+                        currentBatch[index]);
+                }
+
+                deleteCommand.CommandText =
+                    $"""
+                    DELETE FROM Folders
+                    WHERE Id IN
+                        ({string.Join(", ", parameterNames)});
+                    """;
+
+                await deleteCommand
+                    .ExecuteNonQueryAsync(cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            await transaction
+                .CommitAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            _logger.LogInformation(
+                "Completed folder index scan for source " +
+                "{RootSourceId}. Removed {RemovedFolderCount} " +
+                "stale folders; protected paths: " +
+                "{ProtectedPathCount}.",
+                rootSourceId,
+                folderIdsToDelete.Length,
+                normalizedProtectedPaths.Count);
+
+            return folderIdsToDelete.Length;
+        }
+        catch (OperationCanceledException)
+        {
+            await transaction
+                .RollbackAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+
+            _logger.LogInformation(
+                "Folder index scan completion was cancelled " +
+                "for source {RootSourceId}.",
+                rootSourceId);
+
+            throw;
+        }
+        catch (Exception exception)
+        {
+            await transaction
+                .RollbackAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+
+            _logger.LogError(
+                exception,
+                "Failed to complete folder index scan " +
+                "for source {RootSourceId}.",
+                rootSourceId);
+
+            throw;
+        }
+
+        static bool IsRelatedToProtectedPath(
+            string folderPath,
+            IReadOnlyCollection<string> paths)
+        {
+            foreach (var protectedPath in paths)
+            {
+                if (IsSameOrDescendant(
+                        folderPath,
+                        protectedPath) ||
+                    IsSameOrDescendant(
+                        protectedPath,
+                        folderPath))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        static bool IsSameOrDescendant(
+            string path,
+            string possibleAncestor)
+        {
+            if (string.Equals(
+                path,
+                possibleAncestor,
+                StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (!path.StartsWith(
+                    possibleAncestor,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (possibleAncestor.EndsWith('\\') ||
+                possibleAncestor.EndsWith('/'))
+            {
+                return true;
+            }
+
+            return path.Length > possibleAncestor.Length &&
+                (path[possibleAncestor.Length] == '\\' ||
+                 path[possibleAncestor.Length] == '/');
+        }
+    }
+
     public async Task<IReadOnlyList<IndexedFolder>>
         GetByRootSourceIdAsync(
             Guid rootSourceId,

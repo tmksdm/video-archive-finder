@@ -62,6 +62,10 @@ public sealed class FolderIndexingService
             new List<FolderIndexUpsertItem>(
                 BatchSize);
 
+        var protectedPaths =
+            new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+
         _logger.LogInformation(
             "Folder indexing started for source " +
             "{SourceId} at {SourcePath}.",
@@ -85,6 +89,9 @@ public sealed class FolderIndexingService
                 if (entry is FolderEnumerationError error)
                 {
                     errorCount++;
+
+                    protectedPaths.Add(
+                        error.DirectoryPath);
 
                     _logger.LogWarning(
                         error.Exception,
@@ -155,6 +162,15 @@ public sealed class FolderIndexingService
                         .ConfigureAwait(false);
             }
 
+            var removedFolderCount =
+                await _folderIndexRepository
+                    .CompleteScanAsync(
+                        source.Id,
+                        startedAtUtc,
+                        protectedPaths,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
             var completedAtUtc =
                 DateTimeOffset.UtcNow;
 
@@ -169,11 +185,13 @@ public sealed class FolderIndexingService
             _logger.LogInformation(
                 "Folder indexing completed for source {SourceId}. " +
                 "Discovered: {DiscoveredFolderCount}; " +
-                "indexed: {IndexedFolderCount}; errors: {ErrorCount}.",
+                "indexed: {IndexedFolderCount}; errors: {ErrorCount}; " +
+                "removed stale folders: {RemovedFolderCount}.",
                 source.Id,
                 discoveredFolderCount,
                 indexedFolderCount,
-                errorCount);
+                errorCount,
+                removedFolderCount);
 
             return new FolderIndexingResult(
                 RootSourceId: source.Id,
