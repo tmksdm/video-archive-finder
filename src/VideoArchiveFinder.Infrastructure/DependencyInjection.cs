@@ -28,6 +28,18 @@ public static class DependencyInjection
             SqliteFolderIndexRepository>();
 
         services.AddSingleton<
+            IFolderFileSystem,
+            SystemFolderFileSystem>();
+
+        services.AddSingleton<
+            IFolderTreeEnumerator,
+            SystemFolderTreeEnumerator>();
+
+        services.AddSingleton<
+            IFolderIndexingService,
+            FolderIndexingService>();
+
+        services.AddSingleton<
             IArchivePathProbe,
             SystemArchivePathProbe>();
 
