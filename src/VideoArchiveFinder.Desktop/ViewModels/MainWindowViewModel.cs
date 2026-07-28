@@ -25,8 +25,12 @@ public partial class MainWindowViewModel : ObservableObject
     private readonly IFolderIndexingStateRepository
         _folderIndexingStateRepository;
 
-    private readonly Dictionary<Guid, CancellationTokenSource>
-        _indexingCancellationSources = [];
+    private readonly IFolderIndexCleanupService
+        _folderIndexCleanupService;
+
+    private readonly Dictionary<Guid, ActiveIndexingOperation>
+        _activeIndexingOperations = [];
+
 
     private readonly ILogger<MainWindowViewModel> _logger;
 
@@ -68,7 +72,10 @@ public partial class MainWindowViewModel : ObservableObject
 IFolderIndexingService folderIndexingService,
 IFolderIndexingStateRepository
     folderIndexingStateRepository,
+IFolderIndexCleanupService
+    folderIndexCleanupService,
 ILogger<MainWindowViewModel> logger)
+
 
     {
         _archiveSourceService = archiveSourceService;
@@ -83,7 +90,10 @@ ILogger<MainWindowViewModel> logger)
         _folderIndexingService = folderIndexingService;
         _folderIndexingStateRepository =
             folderIndexingStateRepository;
+        _folderIndexCleanupService =
+            folderIndexCleanupService;
         _logger = logger;
+
     }
 
 
@@ -295,14 +305,14 @@ ILogger<MainWindowViewModel> logger)
             return;
         }
 
-        var cancellationTokenSource =
-            new CancellationTokenSource();
+        var operation =
+            new ActiveIndexingOperation();
 
-        if (!_indexingCancellationSources.TryAdd(
+        if (!_activeIndexingOperations.TryAdd(
                 source!.Id,
-                cancellationTokenSource))
+                operation))
         {
-            cancellationTokenSource.Dispose();
+            operation.Dispose();
             return;
         }
 
@@ -316,18 +326,17 @@ ILogger<MainWindowViewModel> logger)
 
         var progress =
             new Progress<FolderIndexingProgress>(
-indexingProgress =>
-{
-    if (!source.IsIndexing)
-    {
-        return;
-    }
+                indexingProgress =>
+                {
+                    if (!source.IsIndexing)
+                    {
+                        return;
+                    }
 
-    source.ApplyIndexingProgress(
-        indexingProgress);
+                    source.ApplyIndexingProgress(
+                        indexingProgress);
 
-
-    StatusText =
+                    StatusText =
                         $"«{source.DisplayName}»: " +
                         $"найдено {indexingProgress.DiscoveredFolderCount}, " +
                         $"записано {indexingProgress.IndexedFolderCount}, " +
@@ -340,7 +349,7 @@ indexingProgress =>
                 await _folderIndexingService.ScanAsync(
                     source.Source,
                     progress,
-                    cancellationTokenSource.Token);
+                    operation.CancellationToken);
 
             source.CompleteIndexing(result);
 
@@ -358,7 +367,7 @@ indexingProgress =>
                 result.ErrorCount);
         }
         catch (OperationCanceledException)
-            when (cancellationTokenSource.IsCancellationRequested)
+            when (operation.IsCancellationRequested)
         {
             source.MarkIndexingCancelled();
 
@@ -385,13 +394,16 @@ indexingProgress =>
         }
         finally
         {
-            _indexingCancellationSources.Remove(source.Id);
-            cancellationTokenSource.Dispose();
+            _activeIndexingOperations.Remove(source.Id);
+
+            operation.MarkCompleted();
+            operation.Dispose();
 
             StartIndexingCommand.NotifyCanExecuteChanged();
             CancelIndexingCommand.NotifyCanExecuteChanged();
         }
     }
+
 
     private bool CanStartIndexing(
         ArchiveSourceItemViewModel? source)
@@ -400,7 +412,8 @@ indexingProgress =>
                source.Availability ==
                    ArchiveSourceAvailability.Available &&
                !source.IsIndexing &&
-               !_indexingCancellationSources.ContainsKey(source.Id);
+               !IsRemovingSource &&
+               !_activeIndexingOperations.ContainsKey(source.Id);
     }
 
     [RelayCommand(CanExecute = nameof(CanCancelIndexing))]
@@ -412,16 +425,15 @@ indexingProgress =>
             return;
         }
 
-        source!.IndexingStatusText =
-            "Ожидание отмены индексирования...";
+        if (_activeIndexingOperations.TryGetValue(
+                source!.Id,
+                out var operation))
+        {
+            operation.Cancel();
 
-        _indexingCancellationSources[source.Id].Cancel();
-
-        StartIndexingCommand.NotifyCanExecuteChanged();
-        CancelIndexingCommand.NotifyCanExecuteChanged();
-
-        StatusText =
-            $"Отмена индексирования «{source.DisplayName}»...";
+            StatusText =
+                $"Остановка индексирования «{source.DisplayName}»...";
+        }
     }
 
     private bool CanCancelIndexing(
@@ -429,8 +441,9 @@ indexingProgress =>
     {
         return source is not null &&
                source.IsIndexing &&
-               _indexingCancellationSources.ContainsKey(source.Id);
+               _activeIndexingOperations.ContainsKey(source.Id);
     }
+
 
     private bool CanAddSource()
     {
@@ -482,30 +495,56 @@ indexingProgress =>
             return;
         }
 
-        foreach (var source in sourcesToRemove)
-        {
-            if (_indexingCancellationSources.TryGetValue(
-                    source.Id,
-                    out var cancellationTokenSource))
-            {
-                cancellationTokenSource.Cancel();
-            }
-        }
-
         IsRemovingSource = true;
 
-        StatusText = sourcesToRemove.Count == 1
-            ? $"Удаление источника «{singleSource!.DisplayName}» из приложения..."
-            : $"Удаление источников из приложения: {sourcesToRemove.Count}...";
+        StartIndexingCommand.NotifyCanExecuteChanged();
+        CancelIndexingCommand.NotifyCanExecuteChanged();
+
+        var sourceIds = sourcesToRemove
+            .Select(source => source.Id)
+            .ToArray();
+
+        var operationsToStop = sourceIds
+            .Select(sourceId =>
+                _activeIndexingOperations.TryGetValue(
+                    sourceId,
+                    out var operation)
+                        ? operation
+                        : null)
+            .Where(operation => operation is not null)
+            .Cast<ActiveIndexingOperation>()
+            .ToArray();
+
+        foreach (var operation in operationsToStop)
+        {
+            operation.Cancel();
+        }
+
+        StatusText = operationsToStop.Length > 0
+            ? "Остановка индексирования перед удалением источников..."
+            : sourcesToRemove.Count == 1
+                ? $"Удаление источника «{singleSource!.DisplayName}»..."
+                : $"Удаление источников: {sourcesToRemove.Count}...";
 
         try
         {
-            var sourceIds = sourcesToRemove
-                .Select(source => source.Id)
-                .ToArray();
+            if (operationsToStop.Length > 0)
+            {
+                await Task.WhenAll(
+                    operationsToStop.Select(
+                        operation => operation.Completion));
+            }
+
+            StatusText = sourcesToRemove.Count == 1
+                ? $"Очистка индекса источника «{singleSource!.DisplayName}»..."
+                : $"Очистка индекса источников: {sourcesToRemove.Count}...";
+
+            await _folderIndexCleanupService
+                .DeleteByRootSourceIdsAsync(sourceIds);
 
             var wereRemoved =
-                await _archiveSourceService.RemoveManyAsync(sourceIds);
+                await _archiveSourceService
+                    .RemoveManyAsync(sourceIds);
 
             if (!wereRemoved)
             {
@@ -513,7 +552,8 @@ indexingProgress =>
                     "Не удалось удалить источники: список источников изменился";
 
                 _logger.LogWarning(
-                    "One or more archive sources were not found during batch removal.");
+                    "One or more archive sources were not found " +
+                    "during batch removal.");
 
                 return;
             }
@@ -536,7 +576,7 @@ indexingProgress =>
                       "Папки и файлы на диске не изменены.";
 
             _logger.LogInformation(
-                "Removed {SourceCount} archive sources from the application.",
+                "Removed {SourceCount} archive sources and their index data.",
                 sourcesToRemove.Count);
         }
         catch (Exception exception)
@@ -553,8 +593,12 @@ indexingProgress =>
         finally
         {
             IsRemovingSource = false;
+
+            StartIndexingCommand.NotifyCanExecuteChanged();
+            CancelIndexingCommand.NotifyCanExecuteChanged();
         }
     }
+
 
 
 
@@ -687,5 +731,41 @@ indexingProgress =>
             StartIndexingCommand.NotifyCanExecuteChanged();
         }
     }
+
+    private sealed class ActiveIndexingOperation
+        : IDisposable
+    {
+        private readonly CancellationTokenSource
+            _cancellationTokenSource = new();
+
+        private readonly TaskCompletionSource<bool>
+            _completionSource = new(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public CancellationToken CancellationToken =>
+            _cancellationTokenSource.Token;
+
+        public bool IsCancellationRequested =>
+            _cancellationTokenSource.IsCancellationRequested;
+
+        public Task Completion =>
+            _completionSource.Task;
+
+        public void Cancel()
+        {
+            _cancellationTokenSource.Cancel();
+        }
+
+        public void MarkCompleted()
+        {
+            _completionSource.TrySetResult(true);
+        }
+
+        public void Dispose()
+        {
+            _cancellationTokenSource.Dispose();
+        }
+    }
+
 
 }

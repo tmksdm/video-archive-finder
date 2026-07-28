@@ -32,6 +32,10 @@ public static class DependencyInjection
             SqliteFolderIndexingStateRepository>();
 
         services.AddSingleton<
+            IFolderIndexCleanupService,
+            SqliteFolderIndexCleanupService>();
+
+        services.AddSingleton<
             IFolderFileSystem,
             SystemFolderFileSystem>();
 
