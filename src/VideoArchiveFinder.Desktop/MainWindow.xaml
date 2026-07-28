@@ -199,6 +199,32 @@
 
                                         <Grid.ContextMenu>
                                             <ContextMenu>
+                                                <MenuItem Header="Индексировать папки"
+          ToolTip="Запустить или повторить индексирование папок источника"
+          AutomationProperties.Name="Индексировать папки источника"
+          Command="{Binding PlacementTarget.Tag.StartIndexingCommand,
+                            RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
+          CommandParameter="{Binding PlacementTarget.DataContext,
+                                     RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}">
+                                                    <MenuItem.Icon>
+                                                        <materialDesign:PackIcon Kind="DatabaseRefreshOutline"/>
+                                                    </MenuItem.Icon>
+                                                </MenuItem>
+
+                                                <MenuItem Header="Отменить индексирование"
+          ToolTip="Остановить текущее индексирование источника"
+          AutomationProperties.Name="Отменить индексирование источника"
+          Command="{Binding PlacementTarget.Tag.CancelIndexingCommand,
+                            RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
+          CommandParameter="{Binding PlacementTarget.DataContext,
+                                     RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}">
+                                                    <MenuItem.Icon>
+                                                        <materialDesign:PackIcon Kind="Cancel"/>
+                                                    </MenuItem.Icon>
+                                                </MenuItem>
+
+                                                <Separator/>
+
                                                 <MenuItem Header="Открыть в Проводнике"
                   Command="{Binding PlacementTarget.Tag.OpenArchiveSourceCommand,
                                     RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
@@ -247,7 +273,9 @@
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
                                             <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
                                         </Grid.RowDefinitions>
+
 
                                         <TextBlock Grid.Row="0"
                        FontWeight="SemiBold"
@@ -285,6 +313,82 @@
                        Text="{Binding FullPath}"
                        TextTrimming="CharacterEllipsis"
                        ToolTip="{Binding FullPath}"/>
+
+                                        <StackPanel Grid.Row="3"
+            Margin="0,5,0,0">
+
+                                            <ProgressBar Height="3"
+                 Margin="0,0,0,5"
+                 IsIndeterminate="True">
+                                                <ProgressBar.Style>
+                                                    <Style TargetType="ProgressBar">
+                                                        <Setter Property="Visibility"
+                        Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsIndexing}"
+                                 Value="True">
+                                                                <Setter Property="Visibility"
+                                Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </ProgressBar.Style>
+                                            </ProgressBar>
+
+                                            <TextBlock FontSize="12"
+               FontWeight="SemiBold"
+               Foreground="#374151"
+               Text="{Binding IndexingStatusText}"
+               TextTrimming="CharacterEllipsis"
+               ToolTip="{Binding IndexingStatusText}"/>
+
+                                            <TextBlock Margin="0,2,0,0"
+               FontSize="11"
+               Foreground="#6B7280"
+               Text="{Binding IndexingSummaryText}"
+               TextTrimming="CharacterEllipsis"
+               ToolTip="{Binding IndexingSummaryText}">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility"
+                        Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding HasIndexingDetails}"
+                                 Value="True">
+                                                                <Setter Property="Visibility"
+                                Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+
+                                            <TextBlock Margin="0,2,0,0"
+               FontSize="11"
+               Foreground="#6B7280"
+               Text="{Binding CurrentIndexingPath}"
+               TextTrimming="CharacterEllipsis"
+               ToolTip="{Binding CurrentIndexingPath}">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility"
+                        Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding HasCurrentIndexingPath}"
+                                 Value="True">
+                                                                <Setter Property="Visibility"
+                                Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+
+                                        </StackPanel>
+
+
+
+
                                     </Grid>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>

@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using VideoArchiveFinder.Application.ArchiveSources;
+using VideoArchiveFinder.Application.Indexing;
 using VideoArchiveFinder.Desktop.Services;
 using VideoArchiveFinder.Domain.ArchiveSources;
 
@@ -19,6 +20,11 @@ public partial class MainWindowViewModel : ObservableObject
     private readonly IUncPathInputDialog _uncPathInputDialog;
     private readonly IArchiveSourceRemovalConfirmationDialog
         _archiveSourceRemovalConfirmationDialog;
+    private readonly IFolderIndexingService _folderIndexingService;
+
+    private readonly Dictionary<Guid, CancellationTokenSource>
+        _indexingCancellationSources = [];
+
     private readonly ILogger<MainWindowViewModel> _logger;
 
     [ObservableProperty]
@@ -56,7 +62,9 @@ public partial class MainWindowViewModel : ObservableObject
         IUncPathInputDialog uncPathInputDialog,
         IArchiveSourceRemovalConfirmationDialog
             archiveSourceRemovalConfirmationDialog,
+        IFolderIndexingService folderIndexingService,
         ILogger<MainWindowViewModel> logger)
+
     {
         _archiveSourceService = archiveSourceService;
         _windowsShellService = windowsShellService;
@@ -67,6 +75,7 @@ public partial class MainWindowViewModel : ObservableObject
         _uncPathInputDialog = uncPathInputDialog;
         _archiveSourceRemovalConfirmationDialog =
             archiveSourceRemovalConfirmationDialog;
+        _folderIndexingService = folderIndexingService;
         _logger = logger;
     }
 
@@ -263,6 +272,152 @@ public partial class MainWindowViewModel : ObservableObject
                ArchiveSourceAvailability.Available;
     }
 
+    [RelayCommand(CanExecute = nameof(CanStartIndexing))]
+    private async Task StartIndexingAsync(
+        ArchiveSourceItemViewModel? source)
+    {
+        if (!CanStartIndexing(source))
+        {
+            return;
+        }
+
+        var cancellationTokenSource =
+            new CancellationTokenSource();
+
+        if (!_indexingCancellationSources.TryAdd(
+                source!.Id,
+                cancellationTokenSource))
+        {
+            cancellationTokenSource.Dispose();
+            return;
+        }
+
+        source.BeginIndexing();
+
+        StartIndexingCommand.NotifyCanExecuteChanged();
+        CancelIndexingCommand.NotifyCanExecuteChanged();
+
+        StatusText =
+            $"Индексирование источника «{source.DisplayName}»...";
+
+        var progress =
+            new Progress<FolderIndexingProgress>(
+indexingProgress =>
+{
+    if (!source.IsIndexing)
+    {
+        return;
+    }
+
+    source.ApplyIndexingProgress(
+        indexingProgress);
+
+
+    StatusText =
+                        $"«{source.DisplayName}»: " +
+                        $"найдено {indexingProgress.DiscoveredFolderCount}, " +
+                        $"записано {indexingProgress.IndexedFolderCount}, " +
+                        $"ошибок {indexingProgress.ErrorCount}";
+                });
+
+        try
+        {
+            var result =
+                await _folderIndexingService.ScanAsync(
+                    source.Source,
+                    progress,
+                    cancellationTokenSource.Token);
+
+            source.CompleteIndexing(result);
+
+            StatusText =
+                $"Индексирование «{source.DisplayName}» завершено. " +
+                $"Папок: {result.IndexedFolderCount}; " +
+                $"ошибок: {result.ErrorCount}";
+
+            _logger.LogInformation(
+                "Folder indexing completed for archive source " +
+                "{SourceId}. Indexed folders: {IndexedFolderCount}; " +
+                "errors: {ErrorCount}.",
+                source.Id,
+                result.IndexedFolderCount,
+                result.ErrorCount);
+        }
+        catch (OperationCanceledException)
+            when (cancellationTokenSource.IsCancellationRequested)
+        {
+            source.MarkIndexingCancelled();
+
+            StatusText =
+                $"Индексирование «{source.DisplayName}» отменено";
+
+            _logger.LogInformation(
+                "Folder indexing was cancelled for archive source " +
+                "{SourceId}.",
+                source.Id);
+        }
+        catch (Exception exception)
+        {
+            source.MarkIndexingFailed();
+
+            StatusText =
+                $"Не удалось проиндексировать «{source.DisplayName}»";
+
+            _logger.LogError(
+                exception,
+                "Folder indexing failed for archive source " +
+                "{SourceId}.",
+                source.Id);
+        }
+        finally
+        {
+            _indexingCancellationSources.Remove(source.Id);
+            cancellationTokenSource.Dispose();
+
+            StartIndexingCommand.NotifyCanExecuteChanged();
+            CancelIndexingCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    private bool CanStartIndexing(
+        ArchiveSourceItemViewModel? source)
+    {
+        return source is not null &&
+               source.Availability ==
+                   ArchiveSourceAvailability.Available &&
+               !source.IsIndexing &&
+               !_indexingCancellationSources.ContainsKey(source.Id);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanCancelIndexing))]
+    private void CancelIndexing(
+        ArchiveSourceItemViewModel? source)
+    {
+        if (!CanCancelIndexing(source))
+        {
+            return;
+        }
+
+        source!.IndexingStatusText =
+            "Ожидание отмены индексирования...";
+
+        _indexingCancellationSources[source.Id].Cancel();
+
+        StartIndexingCommand.NotifyCanExecuteChanged();
+        CancelIndexingCommand.NotifyCanExecuteChanged();
+
+        StatusText =
+            $"Отмена индексирования «{source.DisplayName}»...";
+    }
+
+    private bool CanCancelIndexing(
+        ArchiveSourceItemViewModel? source)
+    {
+        return source is not null &&
+               source.IsIndexing &&
+               _indexingCancellationSources.ContainsKey(source.Id);
+    }
+
     private bool CanAddSource()
     {
         return !IsLoadingSources &&
@@ -311,6 +466,16 @@ public partial class MainWindowViewModel : ObservableObject
                 : "Удаление выбранных источников отменено";
 
             return;
+        }
+
+        foreach (var source in sourcesToRemove)
+        {
+            if (_indexingCancellationSources.TryGetValue(
+                    source.Id,
+                    out var cancellationTokenSource))
+            {
+                cancellationTokenSource.Cancel();
+            }
         }
 
         IsRemovingSource = true;
@@ -473,6 +638,7 @@ public partial class MainWindowViewModel : ObservableObject
         finally
         {
             OpenArchiveSourceCommand.NotifyCanExecuteChanged();
+            StartIndexingCommand.NotifyCanExecuteChanged();
         }
     }
 
