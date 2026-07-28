@@ -22,6 +22,9 @@ public partial class MainWindowViewModel : ObservableObject
         _archiveSourceRemovalConfirmationDialog;
     private readonly IFolderIndexingService _folderIndexingService;
 
+    private readonly IFolderIndexingStateRepository
+        _folderIndexingStateRepository;
+
     private readonly Dictionary<Guid, CancellationTokenSource>
         _indexingCancellationSources = [];
 
@@ -62,8 +65,10 @@ public partial class MainWindowViewModel : ObservableObject
         IUncPathInputDialog uncPathInputDialog,
         IArchiveSourceRemovalConfirmationDialog
             archiveSourceRemovalConfirmationDialog,
-        IFolderIndexingService folderIndexingService,
-        ILogger<MainWindowViewModel> logger)
+IFolderIndexingService folderIndexingService,
+IFolderIndexingStateRepository
+    folderIndexingStateRepository,
+ILogger<MainWindowViewModel> logger)
 
     {
         _archiveSourceService = archiveSourceService;
@@ -76,6 +81,8 @@ public partial class MainWindowViewModel : ObservableObject
         _archiveSourceRemovalConfirmationDialog =
             archiveSourceRemovalConfirmationDialog;
         _folderIndexingService = folderIndexingService;
+        _folderIndexingStateRepository =
+            folderIndexingStateRepository;
         _logger = logger;
     }
 
@@ -104,7 +111,14 @@ public partial class MainWindowViewModel : ObservableObject
                 source => source.DisplayName,
                 StringComparer.CurrentCultureIgnoreCase))
             {
-                Sources.Add(CreateSourceItem(source));
+                var sourceItem =
+                    CreateSourceItem(source);
+
+                await RestoreIndexingStateAsync(
+                    sourceItem,
+                    cancellationToken);
+
+                Sources.Add(sourceItem);
             }
 
             HasSources = Sources.Count > 0;
@@ -609,6 +623,38 @@ indexingProgress =>
         _ = CheckSourceAvailabilityAsync(sourceItem);
 
         return sourceItem;
+    }
+
+    private async Task RestoreIndexingStateAsync(
+        ArchiveSourceItemViewModel sourceItem,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var state =
+                await _folderIndexingStateRepository
+                    .GetAsync(
+                        sourceItem.Id,
+                        cancellationToken);
+
+            if (state is not null)
+            {
+                sourceItem.RestoreIndexingState(state);
+            }
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Failed to restore folder indexing state " +
+                "for archive source {SourceId}.",
+                sourceItem.Id);
+        }
     }
 
     private async Task CheckSourceAvailabilityAsync(

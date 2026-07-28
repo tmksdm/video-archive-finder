@@ -7,7 +7,7 @@ namespace VideoArchiveFinder.Infrastructure.Indexing;
 public sealed class SqliteIndexDatabaseInitializer
     : IIndexDatabaseInitializer
 {
-    private const int CurrentSchemaVersion = 1;
+    private const int CurrentSchemaVersion = 2;
 
     private readonly IndexDatabasePathProvider
         _databasePathProvider;
@@ -89,6 +89,14 @@ public sealed class SqliteIndexDatabaseInitializer
                         cancellationToken)
                     .ConfigureAwait(false);
             }
+            else if (schemaVersion == 1)
+            {
+                await MigrateFromVersion1ToVersion2Async(
+                        connection,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
 
             _logger.LogInformation(
                 "Index database initialized at {DatabasePath}. " +
@@ -196,7 +204,25 @@ public sealed class SqliteIndexDatabaseInitializer
                     IX_Folders_NormalizedName
                 ON Folders(NormalizedName);
 
-                PRAGMA user_version = 1;
+                CREATE TABLE FolderIndexingStates
+                (
+                    RootSourceId TEXT NOT NULL
+                        CONSTRAINT PK_FolderIndexingStates PRIMARY KEY,
+
+                    DiscoveredFolderCount INTEGER NOT NULL
+                        CHECK (DiscoveredFolderCount >= 0),
+
+                    IndexedFolderCount INTEGER NOT NULL
+                        CHECK (IndexedFolderCount >= 0),
+
+                    ErrorCount INTEGER NOT NULL
+                        CHECK (ErrorCount >= 0),
+
+                    StartedAtUtc TEXT NOT NULL,
+                    CompletedAtUtc TEXT NOT NULL
+                );
+
+                PRAGMA user_version = 2;
                 """;
 
             await command
@@ -216,4 +242,59 @@ public sealed class SqliteIndexDatabaseInitializer
             throw;
         }
     }
+
+    private static async Task MigrateFromVersion1ToVersion2Async(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction =
+            connection.BeginTransaction();
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+
+            command.Transaction = transaction;
+
+            command.CommandText =
+                """
+            CREATE TABLE FolderIndexingStates
+            (
+                RootSourceId TEXT NOT NULL
+                    CONSTRAINT PK_FolderIndexingStates PRIMARY KEY,
+
+                DiscoveredFolderCount INTEGER NOT NULL
+                    CHECK (DiscoveredFolderCount >= 0),
+
+                IndexedFolderCount INTEGER NOT NULL
+                    CHECK (IndexedFolderCount >= 0),
+
+                ErrorCount INTEGER NOT NULL
+                    CHECK (ErrorCount >= 0),
+
+                StartedAtUtc TEXT NOT NULL,
+                CompletedAtUtc TEXT NOT NULL
+            );
+
+            PRAGMA user_version = 2;
+            """;
+
+            await command
+                .ExecuteNonQueryAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            await transaction
+                .CommitAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await transaction
+                .RollbackAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+
+            throw;
+        }
+    }
+
 }

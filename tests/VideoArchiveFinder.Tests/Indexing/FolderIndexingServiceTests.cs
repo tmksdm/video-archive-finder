@@ -50,13 +50,18 @@ public sealed class FolderIndexingServiceTests
         var repository =
             new RecordingFolderIndexRepository();
 
+        var stateRepository =
+            new RecordingFolderIndexingStateRepository();
+
         var progress =
             new RecordingProgress();
 
         var service =
             CreateService(
                 enumerator,
-                repository);
+                repository,
+                stateRepository);
+
 
         var result =
             await service.ScanAsync(
@@ -70,6 +75,35 @@ public sealed class FolderIndexingServiceTests
         Assert.True(
             result.CompletedAtUtc >=
             result.StartedAtUtc);
+
+        var savedState =
+            Assert.Single(
+                stateRepository.SavedStates);
+
+        Assert.Equal(
+            result.RootSourceId,
+            savedState.RootSourceId);
+
+        Assert.Equal(
+            result.DiscoveredFolderCount,
+            savedState.DiscoveredFolderCount);
+
+        Assert.Equal(
+            result.IndexedFolderCount,
+            savedState.IndexedFolderCount);
+
+        Assert.Equal(
+            result.ErrorCount,
+            savedState.ErrorCount);
+
+        Assert.Equal(
+            result.StartedAtUtc,
+            savedState.StartedAtUtc);
+
+        Assert.Equal(
+            result.CompletedAtUtc,
+            savedState.CompletedAtUtc);
+
 
         var batch =
             Assert.Single(repository.Batches);
@@ -176,10 +210,15 @@ public sealed class FolderIndexingServiceTests
         var repository =
             new RecordingFolderIndexRepository();
 
+        var stateRepository =
+            new RecordingFolderIndexingStateRepository();
+
         var service =
             CreateService(
                 new BlockingFolderTreeEnumerator(),
-                repository);
+                repository,
+                stateRepository);
+
 
         using var cancellationSource =
             new CancellationTokenSource();
@@ -198,17 +237,23 @@ public sealed class FolderIndexingServiceTests
 
         Assert.Empty(repository.Batches);
         Assert.Empty(repository.Completions);
+        Assert.Empty(stateRepository.SavedStates);
     }
 
     private static FolderIndexingService CreateService(
         IFolderTreeEnumerator enumerator,
-        IFolderIndexRepository repository)
+        IFolderIndexRepository repository,
+        IFolderIndexingStateRepository?
+            stateRepository = null)
     {
         return new FolderIndexingService(
             enumerator,
             repository,
+            stateRepository ??
+                new RecordingFolderIndexingStateRepository(),
             NullLogger<FolderIndexingService>.Instance);
     }
+
 
     private sealed class TestFolderTreeEnumerator
         : IFolderTreeEnumerator
@@ -315,6 +360,44 @@ public sealed class FolderIndexingServiceTests
         Guid RootSourceId,
         DateTimeOffset ScanStartedAtUtc,
         IReadOnlyList<string> ProtectedPaths);
+
+    private sealed class RecordingFolderIndexingStateRepository
+        : IFolderIndexingStateRepository
+    {
+        public List<FolderIndexingState> SavedStates
+        {
+            get;
+        } = [];
+
+        public Task SaveAsync(
+            FolderIndexingState state,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken
+                .ThrowIfCancellationRequested();
+
+            SavedStates.Add(state);
+
+            return Task.CompletedTask;
+        }
+
+        public Task<FolderIndexingState?> GetAsync(
+            Guid rootSourceId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken
+                .ThrowIfCancellationRequested();
+
+            FolderIndexingState? state =
+                SavedStates.LastOrDefault(
+                    item =>
+                        item.RootSourceId ==
+                        rootSourceId);
+
+            return Task.FromResult(state);
+        }
+    }
+
 
     private sealed class RecordingProgress
         : IProgress<FolderIndexingProgress>

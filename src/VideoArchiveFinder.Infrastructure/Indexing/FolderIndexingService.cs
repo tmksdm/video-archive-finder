@@ -15,12 +15,17 @@ public sealed class FolderIndexingService
     private readonly IFolderIndexRepository
         _folderIndexRepository;
 
+    private readonly IFolderIndexingStateRepository
+        _folderIndexingStateRepository;
+
     private readonly ILogger<FolderIndexingService>
         _logger;
 
     public FolderIndexingService(
         IFolderTreeEnumerator folderTreeEnumerator,
         IFolderIndexRepository folderIndexRepository,
+        IFolderIndexingStateRepository
+            folderIndexingStateRepository,
         ILogger<FolderIndexingService> logger)
     {
         _folderTreeEnumerator =
@@ -28,6 +33,9 @@ public sealed class FolderIndexingService
 
         _folderIndexRepository =
             folderIndexRepository;
+
+        _folderIndexingStateRepository =
+            folderIndexingStateRepository;
 
         _logger = logger;
     }
@@ -174,6 +182,39 @@ public sealed class FolderIndexingService
             var completedAtUtc =
                 DateTimeOffset.UtcNow;
 
+            var result =
+                new FolderIndexingResult(
+                    RootSourceId:
+                        source.Id,
+                    DiscoveredFolderCount:
+                        discoveredFolderCount,
+                    IndexedFolderCount:
+                        indexedFolderCount,
+                    ErrorCount:
+                        errorCount,
+                    StartedAtUtc:
+                        startedAtUtc,
+                    CompletedAtUtc:
+                        completedAtUtc);
+
+            await _folderIndexingStateRepository
+                .SaveAsync(
+                    new FolderIndexingState(
+                        RootSourceId:
+                            result.RootSourceId,
+                        DiscoveredFolderCount:
+                            result.DiscoveredFolderCount,
+                        IndexedFolderCount:
+                            result.IndexedFolderCount,
+                        ErrorCount:
+                            result.ErrorCount,
+                        StartedAtUtc:
+                            result.StartedAtUtc,
+                        CompletedAtUtc:
+                            result.CompletedAtUtc),
+                    cancellationToken)
+                .ConfigureAwait(false);
+
             ReportProgress(
                 progress,
                 FolderIndexingStage.Completed,
@@ -193,18 +234,8 @@ public sealed class FolderIndexingService
                 errorCount,
                 removedFolderCount);
 
-            return new FolderIndexingResult(
-                RootSourceId: source.Id,
-                DiscoveredFolderCount:
-                    discoveredFolderCount,
-                IndexedFolderCount:
-                    indexedFolderCount,
-                ErrorCount:
-                    errorCount,
-                StartedAtUtc:
-                    startedAtUtc,
-                CompletedAtUtc:
-                    completedAtUtc);
+            return result;
+
         }
         catch (OperationCanceledException)
         {

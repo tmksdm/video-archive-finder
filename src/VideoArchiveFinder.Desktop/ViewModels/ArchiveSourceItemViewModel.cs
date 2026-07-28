@@ -158,6 +158,38 @@ public sealed partial class ArchiveSourceItemViewModel :
             "Доступность источника ещё не проверялась"
     };
 
+    public void RestoreIndexingState(
+        FolderIndexingState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+
+        if (state.RootSourceId != Id)
+        {
+            throw new ArgumentException(
+                "Indexing state belongs to another archive source.",
+                nameof(state));
+        }
+
+        DiscoveredFolderCount =
+            state.DiscoveredFolderCount;
+
+        IndexedFolderCount =
+            state.IndexedFolderCount;
+
+        IndexingErrorCount =
+            state.ErrorCount;
+
+        LastIndexedAtUtc =
+            state.CompletedAtUtc;
+
+        CurrentIndexingPath = null;
+        IsIndexing = false;
+
+        IndexingStatusText = state.ErrorCount == 0
+            ? "Индексирование завершено"
+            : "Индексирование завершено с ошибками";
+    }
+
     public void BeginIndexing()
     {
         _previousDiscoveredFolderCount =
