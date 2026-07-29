@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 using VideoArchiveFinder.Application.Indexing;
 using VideoArchiveFinder.Domain.ArchiveSources;
 using VideoArchiveFinder.Infrastructure.Indexing;
+using VideoArchiveFinder.Application.Search;
+
 
 namespace VideoArchiveFinder.Tests.Indexing;
 
@@ -125,8 +127,9 @@ public sealed class FolderIndexingServiceTests
             indexedFolder.SearchTokens);
 
         Assert.Equal(
-            string.Empty,
+            "еж дорог",
             indexedFolder.SearchStems);
+
 
         Assert.Equal(
             @"C:\Archive",
@@ -251,8 +254,11 @@ public sealed class FolderIndexingServiceTests
             repository,
             stateRepository ??
                 new RecordingFolderIndexingStateRepository(),
+            new TextNormalizationService(),
+            new RussianSearchStemService(),
             NullLogger<FolderIndexingService>.Instance);
     }
+
 
 
     private sealed class TestFolderTreeEnumerator

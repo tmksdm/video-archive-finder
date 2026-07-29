@@ -5,6 +5,8 @@ using VideoArchiveFinder.Application.Storage;
 using VideoArchiveFinder.Infrastructure.ArchiveSources;
 using VideoArchiveFinder.Infrastructure.Indexing;
 using VideoArchiveFinder.Infrastructure.Storage;
+using VideoArchiveFinder.Application.Search;
+
 
 namespace VideoArchiveFinder.Infrastructure;
 
@@ -42,6 +44,14 @@ public static class DependencyInjection
         services.AddSingleton<
             IFolderTreeEnumerator,
             SystemFolderTreeEnumerator>();
+
+        services.AddSingleton<
+            ITextNormalizationService,
+            TextNormalizationService>();
+
+        services.AddSingleton<
+            ISearchStemService,
+            RussianSearchStemService>();
 
         services.AddSingleton<
             IFolderIndexingService,

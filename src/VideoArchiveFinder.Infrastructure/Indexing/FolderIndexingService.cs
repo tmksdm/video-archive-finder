@@ -1,6 +1,8 @@
 ﻿using Microsoft.Extensions.Logging;
 using VideoArchiveFinder.Application.Indexing;
 using VideoArchiveFinder.Domain.ArchiveSources;
+using VideoArchiveFinder.Application.Search;
+
 
 namespace VideoArchiveFinder.Infrastructure.Indexing;
 
@@ -18,15 +20,26 @@ public sealed class FolderIndexingService
     private readonly IFolderIndexingStateRepository
         _folderIndexingStateRepository;
 
+    private readonly ITextNormalizationService
+        _textNormalizationService;
+
+    private readonly ISearchStemService
+        _searchStemService;
+
     private readonly ILogger<FolderIndexingService>
         _logger;
 
     public FolderIndexingService(
         IFolderTreeEnumerator folderTreeEnumerator,
         IFolderIndexRepository folderIndexRepository,
-        IFolderIndexingStateRepository
-            folderIndexingStateRepository,
-        ILogger<FolderIndexingService> logger)
+IFolderIndexingStateRepository
+    folderIndexingStateRepository,
+ITextNormalizationService
+    textNormalizationService,
+ISearchStemService
+    searchStemService,
+ILogger<FolderIndexingService> logger)
+
     {
         _folderTreeEnumerator =
             folderTreeEnumerator;
@@ -36,6 +49,12 @@ public sealed class FolderIndexingService
 
         _folderIndexingStateRepository =
             folderIndexingStateRepository;
+
+        _textNormalizationService =
+            textNormalizationService;
+
+        _searchStemService =
+            searchStemService;
 
         _logger = logger;
     }
@@ -288,21 +307,31 @@ public sealed class FolderIndexingService
         return itemsToWrite.Length;
     }
 
-    private static FolderIndexUpsertItem CreateIndexItem(
+    private FolderIndexUpsertItem CreateIndexItem(
         DiscoveredFolder folder,
         Guid rootSourceId,
         DateTimeOffset lastSeenUtc)
     {
         var normalizedName =
-            NormalizeName(folder.Name);
+            _textNormalizationService.Normalize(
+                folder.Name);
+
+        var searchTokens =
+            _textNormalizationService.Tokenize(
+                folder.Name);
 
         return new FolderIndexUpsertItem(
-            FullPath: folder.FullPath,
-            Name: folder.Name,
-            NormalizedName: normalizedName,
+            FullPath:
+                folder.FullPath,
+            Name:
+                folder.Name,
+            NormalizedName:
+                normalizedName,
             SearchTokens:
-                CreateSearchTokens(normalizedName),
-            SearchStems: string.Empty,
+                string.Join(' ', searchTokens),
+            SearchStems:
+                _searchStemService.CreateStemText(
+                    searchTokens),
             ParentFullPath:
                 folder.ParentFullPath,
             RootSourceId:
@@ -313,29 +342,10 @@ public sealed class FolderIndexingService
                 lastSeenUtc,
             DirectSubfolderCount:
                 folder.DirectSubfolderCount,
-            DirectVideoFileCount: 0);
+            DirectVideoFileCount:
+                0);
     }
 
-    private static string NormalizeName(
-        string name)
-    {
-        return name
-            .Trim()
-            .ToLowerInvariant()
-            .Replace('ё', 'е');
-    }
-
-    private static string CreateSearchTokens(
-        string normalizedName)
-    {
-        var tokens =
-            normalizedName.Split(
-                [' ', '_', '-'],
-                StringSplitOptions.RemoveEmptyEntries |
-                StringSplitOptions.TrimEntries);
-
-        return string.Join(' ', tokens);
-    }
 
     private static void ReportProgress(
         IProgress<FolderIndexingProgress>? progress,
