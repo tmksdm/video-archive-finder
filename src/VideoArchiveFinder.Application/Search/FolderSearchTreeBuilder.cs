@@ -2,12 +2,25 @@
 
 public sealed class FolderSearchTreeBuilder
 {
+    private readonly IFolderNameHighlightService
+        _folderNameHighlightService;
+
+    public FolderSearchTreeBuilder(
+        IFolderNameHighlightService folderNameHighlightService)
+    {
+        _folderNameHighlightService =
+            folderNameHighlightService;
+    }
+
     public IReadOnlyList<FolderSearchTreeNode> Build(
         IReadOnlyCollection<FolderSearchResult> matches,
-        IReadOnlyCollection<FolderSearchResult> availableFolders)
+        IReadOnlyCollection<FolderSearchResult> availableFolders,
+        string queryText = "",
+        FolderSearchMode searchMode = FolderSearchMode.Smart)
     {
         ArgumentNullException.ThrowIfNull(matches);
         ArgumentNullException.ThrowIfNull(availableFolders);
+        ArgumentNullException.ThrowIfNull(queryText);
 
         if (matches.Count == 0)
         {
@@ -63,15 +76,19 @@ public sealed class FolderSearchTreeBuilder
         }
 
         return roots
-            .OrderBy(folder => folder.Name,
+            .OrderBy(
+                folder => folder.Name,
                 StringComparer.OrdinalIgnoreCase)
-            .ThenBy(folder => folder.FullPath,
+            .ThenBy(
+                folder => folder.FullPath,
                 StringComparer.OrdinalIgnoreCase)
             .Select(folder => CreateNode(
                 folder,
                 matchIds,
                 childrenByParentId,
-                []))
+                [],
+                queryText,
+                searchMode))
             .ToArray();
     }
 
@@ -105,12 +122,14 @@ public sealed class FolderSearchTreeBuilder
         return includedIds;
     }
 
-    private static FolderSearchTreeNode CreateNode(
+    private FolderSearchTreeNode CreateNode(
         FolderSearchResult folder,
         IReadOnlySet<long> matchIds,
         IReadOnlyDictionary<long, List<FolderSearchResult>>
             childrenByParentId,
-        HashSet<long> ancestorIds)
+        HashSet<long> ancestorIds,
+        string queryText,
+        FolderSearchMode searchMode)
     {
         var currentAncestorIds =
             new HashSet<long>(ancestorIds)
@@ -124,17 +143,35 @@ public sealed class FolderSearchTreeBuilder
             ? childFolders
                 .Where(child =>
                     !currentAncestorIds.Contains(child.Id))
-                .OrderBy(child => child.Name,
+                .OrderBy(
+                    child => child.Name,
                     StringComparer.OrdinalIgnoreCase)
-                .ThenBy(child => child.FullPath,
+                .ThenBy(
+                    child => child.FullPath,
                     StringComparer.OrdinalIgnoreCase)
                 .Select(child => CreateNode(
                     child,
                     matchIds,
                     childrenByParentId,
-                    currentAncestorIds))
+                    currentAncestorIds,
+                    queryText,
+                    searchMode))
                 .ToArray()
             : [];
+
+        var isMatch = matchIds.Contains(folder.Id);
+
+        var nameSegments = isMatch
+            ? _folderNameHighlightService.CreateSegments(
+                folder.Name,
+                queryText,
+                searchMode)
+            :
+            [
+                new FolderNameTextSegment(
+                    folder.Name,
+                    IsHighlighted: false)
+            ];
 
         return new FolderSearchTreeNode(
             Id: folder.Id,
@@ -142,7 +179,8 @@ public sealed class FolderSearchTreeBuilder
             Name: folder.Name,
             RootSourceId: folder.RootSourceId,
             IsAvailable: folder.IsAvailable,
-            IsMatch: matchIds.Contains(folder.Id),
+            IsMatch: isMatch,
+            NameSegments: nameSegments,
             Children: children);
     }
 }

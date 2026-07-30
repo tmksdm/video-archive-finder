@@ -7,4 +7,5 @@ public sealed record FolderSearchTreeNode(
     Guid RootSourceId,
     bool IsAvailable,
     bool IsMatch,
+    IReadOnlyList<FolderNameTextSegment> NameSegments,
     IReadOnlyList<FolderSearchTreeNode> Children);

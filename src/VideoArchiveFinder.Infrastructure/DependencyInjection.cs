@@ -62,6 +62,10 @@ public static class DependencyInjection
             IFolderSearchContextProvider,
             SqliteFolderSearchContextProvider>();
 
+        services.AddSingleton<
+            IFolderNameHighlightService,
+            FolderNameHighlightService>();
+
         services.AddSingleton<FolderSearchTreeBuilder>();
 
         services.AddSingleton<

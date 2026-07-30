@@ -7,7 +7,12 @@ public sealed class FolderSearchTreeBuilderTests
     private static readonly Guid DefaultSourceId =
         Guid.Parse("11111111-1111-1111-1111-111111111111");
 
-    private readonly FolderSearchTreeBuilder _builder = new();
+    private readonly FolderSearchTreeBuilder _builder =
+        new(
+            new FolderNameHighlightService(
+                new TextNormalizationService(),
+                new RussianSearchStemService()));
+
 
     [Fact]
     public void Build_CreatesParentChainForMatch()
@@ -212,6 +217,113 @@ public sealed class FolderSearchTreeBuilderTests
                 Assert.Single(node.Children).Id ==
                 secondMatch.Id);
     }
+
+    [Fact]
+    public void Build_AddsSmartHighlightToMatchingNode()
+    {
+        var root = CreateFolder(
+            id: 1,
+            name: "Архив");
+
+        var match = CreateFolder(
+            id: 2,
+            name: "Железная дорога",
+            parentFolderId: root.Id);
+
+        var result = _builder.Build(
+            matches: [match],
+            availableFolders: [root, match],
+            queryText: "дорог",
+            searchMode: FolderSearchMode.Smart);
+
+        var rootNode = Assert.Single(result);
+        var matchNode = Assert.Single(rootNode.Children);
+
+        Assert.Equal(
+            "дорог",
+            GetHighlightedText(matchNode.NameSegments));
+
+        Assert.Equal(
+            "Железная дорога",
+            GetFullText(matchNode.NameSegments));
+    }
+
+    [Fact]
+    public void Build_DoesNotHighlightParentContext()
+    {
+        var root = CreateFolder(
+            id: 1,
+            name: "Дорожный архив");
+
+        var match = CreateFolder(
+            id: 2,
+            name: "Железная дорога",
+            parentFolderId: root.Id);
+
+        var result = _builder.Build(
+            matches: [match],
+            availableFolders: [root, match],
+            queryText: "дорог",
+            searchMode: FolderSearchMode.Smart);
+
+        var rootNode = Assert.Single(result);
+
+        Assert.False(rootNode.IsMatch);
+
+        Assert.DoesNotContain(
+            rootNode.NameSegments,
+            segment => segment.IsHighlighted);
+
+        Assert.Equal(
+            "Дорожный архив",
+            GetFullText(rootNode.NameSegments));
+    }
+
+    [Fact]
+    public void Build_UsesExactModeForHighlighting()
+    {
+        var match = CreateFolder(
+            id: 1,
+            name: "Почтовая служба");
+
+        var result = _builder.Build(
+            matches: [match],
+            availableFolders: [match],
+            queryText: "почта",
+            searchMode: FolderSearchMode.Exact);
+
+        var matchNode = Assert.Single(result);
+
+        Assert.True(matchNode.IsMatch);
+
+        Assert.DoesNotContain(
+            matchNode.NameSegments,
+            segment => segment.IsHighlighted);
+
+        Assert.Equal(
+            "Почтовая служба",
+            GetFullText(matchNode.NameSegments));
+    }
+
+    private static string GetHighlightedText(
+        IEnumerable<FolderNameTextSegment> segments)
+    {
+        return string.Concat(
+            segments
+                .Where(segment =>
+                    segment.IsHighlighted)
+                .Select(segment =>
+                    segment.Text));
+    }
+
+    private static string GetFullText(
+        IEnumerable<FolderNameTextSegment> segments)
+    {
+        return string.Concat(
+            segments.Select(segment =>
+                segment.Text));
+    }
+
 
     private static FolderSearchResult CreateFolder(
         long id,

@@ -162,7 +162,9 @@ public partial class FolderSearchViewModel
             var resultTree =
                 _folderSearchTreeBuilder.Build(
                     matches,
-                    contextFolders);
+                    contextFolders,
+                    query.Text,
+                    query.Mode);
 
             if (version != _searchVersion)
             {
