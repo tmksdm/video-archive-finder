@@ -47,6 +47,7 @@ public partial class App : System.Windows.Application
                 services.AddSingleton<
                     IArchiveSourceRemovalConfirmationDialog,
                     WindowsArchiveSourceRemovalConfirmationDialog>();
+                services.AddSingleton<FolderSearchViewModel>();
                 services.AddSingleton<MainWindowViewModel>();
                 services.AddSingleton<MainWindow>();
             })

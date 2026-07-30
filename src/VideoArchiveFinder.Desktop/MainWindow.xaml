@@ -25,17 +25,35 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
+
 
                 <TextBox Grid.Column="0"
                          Height="40"
                          Padding="12,6"
                          VerticalContentAlignment="Center"
                          FontSize="16"
-                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+Text="{Binding Search.SearchText,
+               UpdateSourceTrigger=PropertyChanged}"
                          ToolTip="Поиск по названиям папок"/>
 
-                <Button Grid.Column="1"
+                <ComboBox Grid.Column="1"
+          Width="160"
+          Height="40"
+          Margin="8,0,0,0"
+          Padding="8,4"
+          VerticalContentAlignment="Center"
+          ItemsSource="{Binding Search.SearchModes}"
+          DisplayMemberPath="DisplayName"
+          SelectedValuePath="Mode"
+          SelectedValue="{Binding Search.SearchMode,
+                                  Mode=TwoWay}"
+          ToolTip="Режим поиска"
+          AutomationProperties.Name="Режим поиска"/>
+
+
+                <Button Grid.Column="2"
         Width="40"
         Height="40"
         Margin="8,0,0,0"
@@ -411,38 +429,70 @@
                           ShowsPreview="True"/>
 
             <Border Grid.Column="2"
-                    Padding="12"
-                    Background="White"
-                    BorderBrush="#D1D5DB"
-                    BorderThickness="1">
+        Padding="12"
+        Background="White"
+        BorderBrush="#D1D5DB"
+        BorderThickness="1">
                 <Grid>
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
                     <TextBlock Grid.Row="0"
-                               Margin="0,0,0,12"
-                               FontSize="17"
-                               FontWeight="SemiBold"
-                               Text="Результаты поиска"/>
+                   FontSize="17"
+                   FontWeight="SemiBold"
+                   Text="Результаты поиска"/>
 
-                    <StackPanel Grid.Row="1"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center">
-                        <TextBlock HorizontalAlignment="Center"
-                                   FontSize="18"
-                                   FontWeight="SemiBold"
-                                   Text="Video Archive Finder"/>
+                    <TextBlock Grid.Row="1"
+                   Margin="0,8,0,10"
+                   Foreground="#4B5563"
+                   Text="{Binding Search.ResultsSummary}"/>
 
-                        <TextBlock Margin="0,8,0,0"
-                                   Foreground="#6B7280"
-                                   TextAlignment="Center"
-                                   TextWrapping="Wrap"
-                                   Text="Добавьте источник архива, чтобы начать поиск"/>
-                    </StackPanel>
+                    <ListBox Grid.Row="2"
+                 ItemsSource="{Binding Search.Results}"
+                 BorderThickness="0"
+                 Background="Transparent"
+                 HorizontalContentAlignment="Stretch"
+                 ScrollViewer.CanContentScroll="True"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                 VirtualizingPanel.IsVirtualizing="True"
+                 VirtualizingPanel.VirtualizationMode="Recycling">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Padding="8"
+                            BorderBrush="#E5E7EB"
+                            BorderThickness="0,0,0,1">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Grid.Row="0"
+                                       FontSize="15"
+                                       FontWeight="SemiBold"
+                                       Foreground="#111827"
+                                       Text="{Binding Name}"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding Name}"/>
+
+                                        <TextBlock Grid.Row="1"
+                                       Margin="0,4,0,0"
+                                       FontSize="12"
+                                       Foreground="#6B7280"
+                                       Text="{Binding FullPath}"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding FullPath}"/>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
                 </Grid>
             </Border>
+
         </Grid>
 
         <Border Grid.Row="2"

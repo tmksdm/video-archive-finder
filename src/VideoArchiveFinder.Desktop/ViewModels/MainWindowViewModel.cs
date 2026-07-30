@@ -1,7 +1,8 @@
-﻿using System.Collections.ObjectModel;
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MaterialDesignColors;
 using Microsoft.Extensions.Logging;
+using System.Collections.ObjectModel;
 using VideoArchiveFinder.Application.ArchiveSources;
 using VideoArchiveFinder.Application.Indexing;
 using VideoArchiveFinder.Desktop.Services;
@@ -74,6 +75,7 @@ IFolderIndexingStateRepository
     folderIndexingStateRepository,
 IFolderIndexCleanupService
     folderIndexCleanupService,
+FolderSearchViewModel folderSearchViewModel,
 ILogger<MainWindowViewModel> logger)
 
 
@@ -92,12 +94,14 @@ ILogger<MainWindowViewModel> logger)
             folderIndexingStateRepository;
         _folderIndexCleanupService =
             folderIndexCleanupService;
+        Search = folderSearchViewModel;
         _logger = logger;
 
     }
 
 
     public ObservableCollection<ArchiveSourceItemViewModel> Sources { get; } = [];
+    public FolderSearchViewModel Search { get; }
 
     public async Task InitializeAsync(
         CancellationToken cancellationToken = default)
