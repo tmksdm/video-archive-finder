@@ -59,6 +59,12 @@ public static class DependencyInjection
             SqliteFolderSearchService>();
 
         services.AddSingleton<
+            IFolderSearchContextProvider,
+            SqliteFolderSearchContextProvider>();
+
+        services.AddSingleton<FolderSearchTreeBuilder>();
+
+        services.AddSingleton<
             IFolderIndexingService,
             FolderIndexingService>();
 

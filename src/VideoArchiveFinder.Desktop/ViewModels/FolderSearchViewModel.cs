@@ -11,8 +11,17 @@ public partial class FolderSearchViewModel
     private const int DebounceMilliseconds = 250;
     private const int MaximumDisplayedResults = 200;
 
-    private readonly IFolderSearchService _folderSearchService;
-    private readonly ILogger<FolderSearchViewModel> _logger;
+    private readonly IFolderSearchService
+        _folderSearchService;
+
+    private readonly IFolderSearchContextProvider
+        _folderSearchContextProvider;
+
+    private readonly FolderSearchTreeBuilder
+        _folderSearchTreeBuilder;
+
+    private readonly ILogger<FolderSearchViewModel>
+        _logger;
 
     private CancellationTokenSource? _searchCancellation;
     private int _searchVersion;
@@ -34,13 +43,23 @@ public partial class FolderSearchViewModel
 
     public FolderSearchViewModel(
         IFolderSearchService folderSearchService,
+        IFolderSearchContextProvider
+            folderSearchContextProvider,
+        FolderSearchTreeBuilder folderSearchTreeBuilder,
         ILogger<FolderSearchViewModel> logger)
     {
         _folderSearchService = folderSearchService;
+        _folderSearchContextProvider =
+            folderSearchContextProvider;
+
+        _folderSearchTreeBuilder =
+            folderSearchTreeBuilder;
+
         _logger = logger;
     }
 
-    public ObservableCollection<FolderSearchResult> Results
+    public ObservableCollection<FolderSearchTreeNode>
+        Results
     {
         get;
     } = [];
@@ -53,6 +72,7 @@ public partial class FolderSearchViewModel
         new(
             FolderSearchMode.Smart,
             "Умный поиск"),
+
         new(
             FolderSearchMode.Exact,
             "Точное вхождение")
@@ -105,7 +125,6 @@ public partial class FolderSearchViewModel
             return;
         }
 
-
         IsSearching = true;
         ResultsSummary = "Поиск...";
 
@@ -129,10 +148,21 @@ public partial class FolderSearchViewModel
                 SearchMode,
                 MaximumDisplayedResults);
 
-            var results =
+            var matches =
                 await _folderSearchService.SearchAsync(
                     query,
                     cancellation.Token);
+
+            var contextFolders =
+                await _folderSearchContextProvider
+                    .GetContextFoldersAsync(
+                        matches,
+                        cancellation.Token);
+
+            var resultTree =
+                _folderSearchTreeBuilder.Build(
+                    matches,
+                    contextFolders);
 
             if (version != _searchVersion)
             {
@@ -141,14 +171,14 @@ public partial class FolderSearchViewModel
 
             Results.Clear();
 
-            foreach (var result in results)
+            foreach (var rootNode in resultTree)
             {
-                Results.Add(result);
+                Results.Add(rootNode);
             }
 
-            ResultsSummary = results.Count == 0
+            ResultsSummary = matches.Count == 0
                 ? "Совпадений не найдено"
-                : $"Найдено папок: {results.Count}";
+                : $"Найдено папок: {matches.Count}";
         }
         catch (OperationCanceledException)
         {
