@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.0.31903.59
+# Visual Studio Version 18
+VisualStudioVersion = 18.7.11925.98 stable
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
 EndProject
@@ -16,6 +16,8 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoArchiveFinder.Tests", "tests\VideoArchiveFinder.Tests\VideoArchiveFinder.Tests.csproj", "{B698EA1B-EEC2-478B-B309-F90BDECB0792}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoArchiveFinder.SearchBenchmark", "tools\VideoArchiveFinder.SearchBenchmark\VideoArchiveFinder.SearchBenchmark.csproj", "{7AD55D96-A242-4829-A3A1-318F09DC1D76}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -87,6 +89,18 @@ Global
 		{B698EA1B-EEC2-478B-B309-F90BDECB0792}.Release|x64.Build.0 = Release|Any CPU
 		{B698EA1B-EEC2-478B-B309-F90BDECB0792}.Release|x86.ActiveCfg = Release|Any CPU
 		{B698EA1B-EEC2-478B-B309-F90BDECB0792}.Release|x86.Build.0 = Release|Any CPU
+		{7AD55D96-A242-4829-A3A1-318F09DC1D76}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7AD55D96-A242-4829-A3A1-318F09DC1D76}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7AD55D96-A242-4829-A3A1-318F09DC1D76}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{7AD55D96-A242-4829-A3A1-318F09DC1D76}.Debug|x64.Build.0 = Debug|Any CPU
+		{7AD55D96-A242-4829-A3A1-318F09DC1D76}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{7AD55D96-A242-4829-A3A1-318F09DC1D76}.Debug|x86.Build.0 = Debug|Any CPU
+		{7AD55D96-A242-4829-A3A1-318F09DC1D76}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7AD55D96-A242-4829-A3A1-318F09DC1D76}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7AD55D96-A242-4829-A3A1-318F09DC1D76}.Release|x64.ActiveCfg = Release|Any CPU
+		{7AD55D96-A242-4829-A3A1-318F09DC1D76}.Release|x64.Build.0 = Release|Any CPU
+		{7AD55D96-A242-4829-A3A1-318F09DC1D76}.Release|x86.ActiveCfg = Release|Any CPU
+		{7AD55D96-A242-4829-A3A1-318F09DC1D76}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -97,5 +111,8 @@ Global
 		{0346F015-CB7B-471B-BE6C-C3BD9394615B} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{406BB60B-612F-4D72-B73C-D80807A38D1A} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{B698EA1B-EEC2-478B-B309-F90BDECB0792} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {9F7327E9-F1A8-4435-B876-42CAD0BA93DC}
 	EndGlobalSection
 EndGlobal
