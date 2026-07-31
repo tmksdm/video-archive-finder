@@ -7,6 +7,8 @@ using VideoArchiveFinder.Infrastructure.Indexing;
 using VideoArchiveFinder.Infrastructure.Storage;
 using VideoArchiveFinder.Infrastructure.Search;
 using VideoArchiveFinder.Application.Search;
+using VideoArchiveFinder.Application.VideoFiles;
+
 
 
 namespace VideoArchiveFinder.Infrastructure;
@@ -29,6 +31,22 @@ public static class DependencyInjection
         services.AddSingleton<
             IFolderIndexRepository,
             SqliteFolderIndexRepository>();
+
+        services.AddSingleton<
+            IVideoFileIndexRepository,
+            SqliteVideoFileIndexRepository>();
+
+        services.AddSingleton<
+            IVideoFileCandidatePolicy,
+            VideoFileCandidatePolicy>();
+
+        services.AddSingleton<
+            IVideoFileDiscoveryService,
+            VideoFileDiscoveryService>();
+
+        services.AddSingleton<
+            IVideoFileSystem,
+            SystemVideoFileSystem>();
 
         services.AddSingleton<
             IFolderIndexingStateRepository,

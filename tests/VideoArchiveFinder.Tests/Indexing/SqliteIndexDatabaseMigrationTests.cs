@@ -54,13 +54,19 @@ public sealed class SqliteIndexDatabaseMigrationTests
         await connection.OpenAsync();
 
         Assert.Equal(
-            2,
+            3,
             await GetSchemaVersionAsync(connection));
 
         Assert.True(
             await TableExistsAsync(
                 connection,
                 "FolderIndexingStates"));
+
+        Assert.True(
+            await TableExistsAsync(
+                connection,
+                "VideoFiles"));
+
 
         await using var countCommand =
             connection.CreateCommand();

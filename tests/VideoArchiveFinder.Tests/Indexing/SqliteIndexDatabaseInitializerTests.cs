@@ -31,7 +31,7 @@ public sealed class SqliteIndexDatabaseInitializerTests
         await connection.OpenAsync();
 
         Assert.Equal(
-            2,
+            3,
             await GetSchemaVersionAsync(connection));
 
         var tableNames = await ReadStringsAsync(
@@ -47,6 +47,27 @@ public sealed class SqliteIndexDatabaseInitializerTests
         Assert.Contains(
             "FolderIndexingStates",
             tableNames);
+
+        Assert.Contains(
+            "VideoFiles",
+            tableNames);
+
+        var videoFileColumnNames = await ReadStringsAsync(
+            connection,
+            "SELECT name FROM pragma_table_info('VideoFiles');");
+
+        Assert.Contains("Id", videoFileColumnNames);
+        Assert.Contains("FullPath", videoFileColumnNames);
+        Assert.Contains("Name", videoFileColumnNames);
+        Assert.Contains("NormalizedName", videoFileColumnNames);
+        Assert.Contains("Extension", videoFileColumnNames);
+        Assert.Contains("SizeBytes", videoFileColumnNames);
+        Assert.Contains("LastWriteTimeUtc", videoFileColumnNames);
+        Assert.Contains("FolderFullPath", videoFileColumnNames);
+        Assert.Contains("RootSourceId", videoFileColumnNames);
+        Assert.Contains("IsAvailable", videoFileColumnNames);
+        Assert.Contains("LastSeenUtc", videoFileColumnNames);
+
 
         var columnNames = await ReadStringsAsync(
             connection,
@@ -64,6 +85,29 @@ public sealed class SqliteIndexDatabaseInitializerTests
         Assert.Contains("LastSeenUtc", columnNames);
         Assert.Contains("DirectSubfolderCount", columnNames);
         Assert.Contains("DirectVideoFileCount", columnNames);
+
+
+        var videoFileIndexNames = await ReadStringsAsync(
+            connection,
+            """
+    SELECT name
+    FROM sqlite_master
+    WHERE type = 'index'
+      AND tbl_name = 'VideoFiles';
+    """);
+
+        Assert.Contains(
+            "UX_VideoFiles_RootSourceId_FullPath",
+            videoFileIndexNames);
+
+        Assert.Contains(
+            "IX_VideoFiles_RootSourceId_FolderFullPath",
+            videoFileIndexNames);
+
+        Assert.Contains(
+            "IX_VideoFiles_NormalizedName",
+            videoFileIndexNames);
+
 
         var indexNames = await ReadStringsAsync(
             connection,
@@ -148,7 +192,7 @@ public sealed class SqliteIndexDatabaseInitializerTests
 
         Assert.Equal(1, folderCount);
         Assert.Equal(
-            2,
+            3,
             await GetSchemaVersionAsync(verificationConnection));
     }
 
