@@ -1,9 +1,10 @@
-﻿using System.Runtime.CompilerServices;
-using Microsoft.Extensions.Logging.Abstractions;
+﻿using Microsoft.Extensions.Logging.Abstractions;
+using System.Runtime.CompilerServices;
 using VideoArchiveFinder.Application.Indexing;
+using VideoArchiveFinder.Application.Search;
+using VideoArchiveFinder.Application.VideoFiles;
 using VideoArchiveFinder.Domain.ArchiveSources;
 using VideoArchiveFinder.Infrastructure.Indexing;
-using VideoArchiveFinder.Application.Search;
 
 
 namespace VideoArchiveFinder.Tests.Indexing;
@@ -163,6 +164,270 @@ public sealed class FolderIndexingServiceTests
     }
 
     [Fact]
+    public async Task ScanAsync_IndexesDiscoveredVideoFiles()
+    {
+        var source =
+            ArchiveSource.Create(@"C:\Archive");
+
+        var folderPath =
+            @"C:\Archive\Видео";
+
+        var lastWriteTimeUtc =
+            new DateTimeOffset(
+                2026,
+                8,
+                1,
+                10,
+                0,
+                0,
+                TimeSpan.Zero);
+
+        var enumerator =
+            new TestFolderTreeEnumerator(
+            [
+                new DiscoveredFolder(
+                    FullPath:
+                        folderPath,
+                    Name:
+                        "Видео",
+                    ParentFullPath:
+                        @"C:\Archive",
+                    DirectSubfolderCount:
+                        0,
+                    IsAvailable:
+                        true,
+                    IsReparsePoint:
+                        false)
+            ]);
+
+        var discoveryService =
+            new TestVideoFileDiscoveryService(
+                new VideoFileDiscoveryResult(
+                    Files:
+                    [
+                        new DiscoveredVideoFile(
+                            FullPath:
+                                folderPath +
+                                @"\ЁЖ_Дорога.MP4",
+                            Name:
+                                "ЁЖ_Дорога.MP4",
+                            Extension:
+                                ".mp4",
+                            SizeBytes:
+                                12_345,
+                            LastWriteTimeUtc:
+                                lastWriteTimeUtc)
+                    ],
+                    ErrorCount:
+                        0,
+                    CanRemoveStaleEntries:
+                        true));
+
+        var folderRepository =
+            new RecordingFolderIndexRepository();
+
+        var videoRepository =
+            new RecordingVideoFileIndexRepository();
+
+        var service =
+            CreateService(
+                enumerator,
+                folderRepository,
+                videoFileDiscoveryService:
+                    discoveryService,
+                videoFileIndexRepository:
+                    videoRepository);
+
+        var result =
+            await service.ScanAsync(source);
+
+        Assert.Equal(0, result.ErrorCount);
+
+        Assert.Equal(
+            folderPath,
+            Assert.Single(
+                discoveryService
+                    .RequestedFolderPaths));
+
+        var folderBatch =
+            Assert.Single(
+                folderRepository.Batches);
+
+        var indexedFolder =
+            Assert.Single(folderBatch);
+
+        Assert.Equal(
+            1,
+            indexedFolder.DirectVideoFileCount);
+
+        var videoBatch =
+            Assert.Single(
+                videoRepository.Batches);
+
+        var indexedVideo =
+            Assert.Single(videoBatch);
+
+        Assert.Equal(
+            folderPath + @"\ЁЖ_Дорога.MP4",
+            indexedVideo.FullPath);
+
+        Assert.Equal(
+            "ЁЖ_Дорога.MP4",
+            indexedVideo.Name);
+
+        Assert.Equal(
+            "еж_дорога.mp4",
+            indexedVideo.NormalizedName);
+
+        Assert.Equal(
+            ".mp4",
+            indexedVideo.Extension);
+
+        Assert.Equal(
+            12_345,
+            indexedVideo.SizeBytes);
+
+        Assert.Equal(
+            lastWriteTimeUtc,
+            indexedVideo.LastWriteTimeUtc);
+
+        Assert.Equal(
+            folderPath,
+            indexedVideo.FolderFullPath);
+
+        Assert.Equal(
+            source.Id,
+            indexedVideo.RootSourceId);
+
+        Assert.True(indexedVideo.IsAvailable);
+
+        Assert.Equal(
+            result.StartedAtUtc,
+            indexedVideo.LastSeenUtc);
+
+        var completion =
+            Assert.Single(
+                videoRepository.Completions);
+
+        Assert.Equal(
+            source.Id,
+            completion.RootSourceId);
+
+        Assert.Equal(
+            folderPath,
+            completion.FolderFullPath);
+
+        Assert.Equal(
+            result.StartedAtUtc,
+            completion.ScanStartedAtUtc);
+    }
+
+    [Fact]
+    public async Task ScanAsync_WhenVideoDiscoveryIsIncomplete_DoesNotRemoveStaleFiles()
+    {
+        var source =
+            ArchiveSource.Create(@"C:\Archive");
+
+        var folderPath =
+            @"C:\Archive\Повреждённая папка";
+
+        var enumerator =
+            new TestFolderTreeEnumerator(
+            [
+                new DiscoveredFolder(
+                    FullPath:
+                        folderPath,
+                    Name:
+                        "Повреждённая папка",
+                    ParentFullPath:
+                        @"C:\Archive",
+                    DirectSubfolderCount:
+                        0,
+                    IsAvailable:
+                        true,
+                    IsReparsePoint:
+                        false)
+            ]);
+
+        var discoveryService =
+            new TestVideoFileDiscoveryService(
+                new VideoFileDiscoveryResult(
+                    Files:
+                    [
+                        new DiscoveredVideoFile(
+                            FullPath:
+                                folderPath +
+                                @"\Рабочий.mkv",
+                            Name:
+                                "Рабочий.mkv",
+                            Extension:
+                                ".mkv",
+                            SizeBytes:
+                                5_000,
+                            LastWriteTimeUtc:
+                                new DateTimeOffset(
+                                    2026,
+                                    8,
+                                    1,
+                                    11,
+                                    0,
+                                    0,
+                                    TimeSpan.Zero))
+                    ],
+                    ErrorCount:
+                        1,
+                    CanRemoveStaleEntries:
+                        false));
+
+        var folderRepository =
+            new RecordingFolderIndexRepository();
+
+        var videoRepository =
+            new RecordingVideoFileIndexRepository();
+
+        var service =
+            CreateService(
+                enumerator,
+                folderRepository,
+                videoFileDiscoveryService:
+                    discoveryService,
+                videoFileIndexRepository:
+                    videoRepository);
+
+        var result =
+            await service.ScanAsync(source);
+
+        Assert.Equal(1, result.ErrorCount);
+
+        var folderBatch =
+            Assert.Single(
+                folderRepository.Batches);
+
+        var indexedFolder =
+            Assert.Single(folderBatch);
+
+        Assert.Equal(
+            1,
+            indexedFolder.DirectVideoFileCount);
+
+        var videoBatch =
+            Assert.Single(
+                videoRepository.Batches);
+
+        var indexedVideo =
+            Assert.Single(videoBatch);
+
+        Assert.Equal(
+            "Рабочий.mkv",
+            indexedVideo.Name);
+
+        Assert.Empty(
+            videoRepository.Completions);
+    }
+
+
+
+    [Fact]
     public async Task ScanAsync_MoreThanBatchSize_WritesSeveralBatches()
     {
         var source =
@@ -247,17 +512,26 @@ public sealed class FolderIndexingServiceTests
         IFolderTreeEnumerator enumerator,
         IFolderIndexRepository repository,
         IFolderIndexingStateRepository?
-            stateRepository = null)
+            stateRepository = null,
+        IVideoFileDiscoveryService?
+            videoFileDiscoveryService = null,
+        IVideoFileIndexRepository?
+            videoFileIndexRepository = null)
     {
         return new FolderIndexingService(
             enumerator,
             repository,
+            videoFileDiscoveryService ??
+                new EmptyVideoFileDiscoveryService(),
+            videoFileIndexRepository ??
+                new RecordingVideoFileIndexRepository(),
             stateRepository ??
                 new RecordingFolderIndexingStateRepository(),
             new TextNormalizationService(),
             new RussianSearchStemService(),
             NullLogger<FolderIndexingService>.Instance);
     }
+
 
 
 
@@ -403,6 +677,121 @@ public sealed class FolderIndexingServiceTests
             return Task.FromResult(state);
         }
     }
+
+    private sealed class TestVideoFileDiscoveryService
+        : IVideoFileDiscoveryService
+    {
+        private readonly VideoFileDiscoveryResult
+            _result;
+
+        public TestVideoFileDiscoveryService(
+            VideoFileDiscoveryResult result)
+        {
+            _result = result;
+        }
+
+        public List<string> RequestedFolderPaths
+        {
+            get;
+        } = [];
+
+        public Task<VideoFileDiscoveryResult> DiscoverAsync(
+            string folderPath,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken
+                .ThrowIfCancellationRequested();
+
+            RequestedFolderPaths.Add(folderPath);
+
+            return Task.FromResult(_result);
+        }
+    }
+
+    private sealed class EmptyVideoFileDiscoveryService
+        : IVideoFileDiscoveryService
+    {
+        public Task<VideoFileDiscoveryResult> DiscoverAsync(
+            string folderPath,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken
+                .ThrowIfCancellationRequested();
+
+            return Task.FromResult(
+                new VideoFileDiscoveryResult(
+                    Files: [],
+                    ErrorCount: 0,
+                    CanRemoveStaleEntries: true));
+        }
+    }
+
+    private sealed class RecordingVideoFileIndexRepository
+        : IVideoFileIndexRepository
+    {
+        public List<
+            IReadOnlyList<VideoFileIndexUpsertItem>>
+            Batches
+        {
+            get;
+        } = [];
+
+        public List<VideoFolderScanCompletion>
+            Completions
+        {
+            get;
+        } = [];
+
+        public Task UpsertBatchAsync(
+            IReadOnlyCollection<
+                VideoFileIndexUpsertItem> files,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken
+                .ThrowIfCancellationRequested();
+
+            Batches.Add(files.ToArray());
+
+            return Task.CompletedTask;
+        }
+
+        public Task<int> CompleteFolderScanAsync(
+            Guid rootSourceId,
+            string folderFullPath,
+            DateTimeOffset scanStartedAtUtc,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken
+                .ThrowIfCancellationRequested();
+
+            Completions.Add(
+                new VideoFolderScanCompletion(
+                    rootSourceId,
+                    folderFullPath,
+                    scanStartedAtUtc));
+
+            return Task.FromResult(0);
+        }
+
+        public Task<IReadOnlyList<IndexedVideoFile>>
+            GetByFolderPathAsync(
+                Guid rootSourceId,
+                string folderFullPath,
+                CancellationToken cancellationToken = default)
+        {
+            cancellationToken
+                .ThrowIfCancellationRequested();
+
+            return Task.FromResult<
+                IReadOnlyList<IndexedVideoFile>>([]);
+        }
+    }
+
+    private sealed record VideoFolderScanCompletion(
+        Guid RootSourceId,
+        string FolderFullPath,
+        DateTimeOffset ScanStartedAtUtc);
+
 
 
     private sealed class RecordingProgress

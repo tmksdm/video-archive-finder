@@ -2,7 +2,7 @@
 using VideoArchiveFinder.Application.Indexing;
 using VideoArchiveFinder.Domain.ArchiveSources;
 using VideoArchiveFinder.Application.Search;
-
+using VideoArchiveFinder.Application.VideoFiles;
 
 namespace VideoArchiveFinder.Infrastructure.Indexing;
 
@@ -16,6 +16,12 @@ public sealed class FolderIndexingService
 
     private readonly IFolderIndexRepository
         _folderIndexRepository;
+
+    private readonly IVideoFileDiscoveryService
+        _videoFileDiscoveryService;
+
+    private readonly IVideoFileIndexRepository
+        _videoFileIndexRepository;
 
     private readonly IFolderIndexingStateRepository
         _folderIndexingStateRepository;
@@ -32,6 +38,8 @@ public sealed class FolderIndexingService
     public FolderIndexingService(
         IFolderTreeEnumerator folderTreeEnumerator,
         IFolderIndexRepository folderIndexRepository,
+        IVideoFileDiscoveryService videoFileDiscoveryService,
+        IVideoFileIndexRepository videoFileIndexRepository,
 IFolderIndexingStateRepository
     folderIndexingStateRepository,
 ITextNormalizationService
@@ -46,6 +54,12 @@ ILogger<FolderIndexingService> logger)
 
         _folderIndexRepository =
             folderIndexRepository;
+
+        _videoFileDiscoveryService =
+            videoFileDiscoveryService;
+
+        _videoFileIndexRepository =
+            videoFileIndexRepository;
 
         _folderIndexingStateRepository =
             folderIndexingStateRepository;
@@ -144,11 +158,24 @@ ILogger<FolderIndexingService> logger)
 
                 discoveredFolderCount++;
 
+                var videoIndexingResult =
+                    await IndexVideoFilesAsync(
+                            folder,
+                            source.Id,
+                            startedAtUtc,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+
+                errorCount +=
+                    videoIndexingResult.ErrorCount;
+
                 batch.Add(
                     CreateIndexItem(
                         folder,
                         source.Id,
-                        startedAtUtc));
+                        startedAtUtc,
+                        videoIndexingResult.FileCount));
+
 
                 ReportProgress(
                     progress,
@@ -307,10 +334,99 @@ ILogger<FolderIndexingService> logger)
         return itemsToWrite.Length;
     }
 
+    private async Task<(
+        int FileCount,
+        int ErrorCount)> IndexVideoFilesAsync(
+            DiscoveredFolder folder,
+            Guid rootSourceId,
+            DateTimeOffset scanStartedAtUtc,
+            CancellationToken cancellationToken)
+    {
+        if (!folder.IsAvailable)
+        {
+            return (
+                FileCount: 0,
+                ErrorCount: 0);
+        }
+
+        var discoveryResult =
+            await _videoFileDiscoveryService
+                .DiscoverAsync(
+                    folder.FullPath,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+        var files =
+            discoveryResult.Files
+                .Select(
+                    file => CreateVideoIndexItem(
+                        file,
+                        folder.FullPath,
+                        rootSourceId,
+                        scanStartedAtUtc))
+                .ToArray();
+
+        await _videoFileIndexRepository
+            .UpsertBatchAsync(
+                files,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (discoveryResult.CanRemoveStaleEntries)
+        {
+            await _videoFileIndexRepository
+                .CompleteFolderScanAsync(
+                    rootSourceId,
+                    folder.FullPath,
+                    scanStartedAtUtc,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return (
+            FileCount: files.Length,
+            ErrorCount:
+                discoveryResult.ErrorCount);
+    }
+
+    private VideoFileIndexUpsertItem
+        CreateVideoIndexItem(
+            DiscoveredVideoFile file,
+            string folderFullPath,
+            Guid rootSourceId,
+            DateTimeOffset lastSeenUtc)
+    {
+        return new VideoFileIndexUpsertItem(
+            FullPath:
+                file.FullPath,
+            Name:
+                file.Name,
+            NormalizedName:
+                _textNormalizationService.Normalize(
+                    file.Name),
+            Extension:
+                file.Extension,
+            SizeBytes:
+                file.SizeBytes,
+            LastWriteTimeUtc:
+                file.LastWriteTimeUtc,
+            FolderFullPath:
+                folderFullPath,
+            RootSourceId:
+                rootSourceId,
+            IsAvailable:
+                true,
+            LastSeenUtc:
+                lastSeenUtc);
+    }
+
+
     private FolderIndexUpsertItem CreateIndexItem(
         DiscoveredFolder folder,
         Guid rootSourceId,
-        DateTimeOffset lastSeenUtc)
+        DateTimeOffset lastSeenUtc,
+        int directVideoFileCount)
+
     {
         var normalizedName =
             _textNormalizationService.Normalize(
@@ -343,7 +459,8 @@ ILogger<FolderIndexingService> logger)
             DirectSubfolderCount:
                 folder.DirectSubfolderCount,
             DirectVideoFileCount:
-                0);
+                directVideoFileCount);
+
     }
 
 
