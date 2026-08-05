@@ -1,6 +1,7 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using VideoArchiveFinder.Application.Search;
 using VideoArchiveFinder.Desktop.ViewModels;
 
 namespace VideoArchiveFinder.Desktop;
@@ -79,4 +80,52 @@ public partial class MainWindow : Window
 
         await viewModel.RemoveSourcesAsync(selectedSources);
     }
+
+    private async void FolderSearchNode_PreviewMouseLeftButtonDown(
+        object sender,
+        MouseButtonEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel ||
+            sender is not FrameworkElement element ||
+            element.DataContext is not
+                FolderSearchTreeNode selectedFolder)
+        {
+            return;
+        }
+
+        SetVideoFilesPanelVisible(true);
+
+        await viewModel.VideoFiles.SelectFolderAsync(
+            selectedFolder);
+    }
+
+
+    private void ReturnToSearchResults_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        SetVideoFilesPanelVisible(false);
+    }
+
+
+    private void SetVideoFilesPanelVisible(bool isVisible)
+    {
+        var searchVisibility = isVisible
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+
+        SearchResultsTitle.Visibility = searchVisibility;
+        SearchResultsSummary.Visibility = searchVisibility;
+        SearchResultsTree.Visibility = searchVisibility;
+
+        VideoFilesPanel.Visibility = isVisible
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+
+
+
+
+
 }

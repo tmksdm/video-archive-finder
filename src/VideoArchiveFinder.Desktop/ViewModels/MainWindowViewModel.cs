@@ -76,6 +76,7 @@ IFolderIndexingStateRepository
 IFolderIndexCleanupService
     folderIndexCleanupService,
 FolderSearchViewModel folderSearchViewModel,
+FolderVideoFilesViewModel folderVideoFilesViewModel,
 ILogger<MainWindowViewModel> logger)
 
 
@@ -95,6 +96,7 @@ ILogger<MainWindowViewModel> logger)
         _folderIndexCleanupService =
             folderIndexCleanupService;
         Search = folderSearchViewModel;
+        VideoFiles = folderVideoFilesViewModel;
         _logger = logger;
 
     }
@@ -102,6 +104,8 @@ ILogger<MainWindowViewModel> logger)
 
     public ObservableCollection<ArchiveSourceItemViewModel> Sources { get; } = [];
     public FolderSearchViewModel Search { get; }
+    public FolderVideoFilesViewModel VideoFiles { get; }
+
 
     public async Task InitializeAsync(
         CancellationToken cancellationToken = default)

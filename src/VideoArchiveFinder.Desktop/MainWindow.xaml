@@ -11,13 +11,17 @@
         WindowStartupLocation="CenterScreen">
 
     <Grid Background="#F3F4F6">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
 
-        <Border Grid.Row="0"
+
+        <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+
+
+
+    <Border Grid.Row="0"
                 Padding="12"
                 Background="White"
                 BorderBrush="#D1D5DB"
@@ -441,17 +445,24 @@ Text="{Binding Search.SearchText,
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Row="0"
-                   FontSize="17"
-                   FontWeight="SemiBold"
-                   Text="Результаты поиска"/>
 
-                    <TextBlock Grid.Row="1"
-                   Margin="0,8,0,10"
-                   Foreground="#4B5563"
-                   Text="{Binding Search.ResultsSummary}"/>
 
-                    <TreeView Grid.Row="2"
+                    <TextBlock x:Name="SearchResultsTitle"
+           Grid.Row="0"
+           FontSize="17"
+           FontWeight="SemiBold"
+           Text="Результаты поиска"/>
+
+
+                    <TextBlock x:Name="SearchResultsSummary"
+           Grid.Row="1"
+           Margin="0,8,0,10"
+           Foreground="#4B5563"
+           Text="{Binding Search.ResultsSummary}"/>
+
+
+                    <TreeView x:Name="SearchResultsTree"
+          Grid.Row="2"
           ItemsSource="{Binding Search.Results}"
           BorderThickness="0"
           Background="Transparent"
@@ -461,6 +472,7 @@ Text="{Binding Search.SearchText,
           ScrollViewer.VerticalScrollBarVisibility="Auto"
           VirtualizingPanel.IsVirtualizing="True"
           VirtualizingPanel.VirtualizationMode="Recycling">
+
 
                         <TreeView.Resources>
                             <SolidColorBrush
@@ -498,7 +510,8 @@ Text="{Binding Search.SearchText,
                             <HierarchicalDataTemplate
             ItemsSource="{Binding Children}">
 
-                                <Border Padding="6,5"
+                            <Border
+    PreviewMouseLeftButtonDown="FolderSearchNode_PreviewMouseLeftButtonDown" Padding="6,5"
                     Background="Transparent"
                     ToolTip="{Binding FullPath}">
                                     <Grid>
@@ -592,6 +605,119 @@ Text="{Binding Search.SearchText,
                             </HierarchicalDataTemplate>
                         </TreeView.ItemTemplate>
                     </TreeView>
+
+
+                    <Border x:Name="VideoFilesPanel"
+        Grid.Row="0"
+        Grid.RowSpan="3"
+        Visibility="Collapsed"
+        BorderThickness="0">
+
+                        <Grid Margin="8,8,4,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Button Grid.Column="0"
+            Width="32"
+            Height="32"
+            Margin="0,0,8,0"
+            Padding="4"
+            Click="ReturnToSearchResults_Click"
+            ToolTip="Вернуться к результатам поиска"
+            AutomationProperties.Name="Вернуться к результатам поиска">
+                                    <materialDesign:PackIcon Width="19"
+                                 Height="19"
+                                 Kind="ArrowLeft"/>
+                                </Button>
+
+                                <TextBlock Grid.Column="1"
+               VerticalAlignment="Center"
+               FontSize="17"
+               FontWeight="SemiBold"
+               Text="{Binding VideoFiles.SelectedFolder.Name}"
+               TextTrimming="CharacterEllipsis"
+               ToolTip="{Binding VideoFiles.SelectedFolder.Name}"/>
+                            </Grid>
+
+
+                            <TextBlock Grid.Row="1"
+                   Margin="0,3,0,0"
+                   FontSize="12"
+                   Foreground="#6B7280"
+                   Text="{Binding VideoFiles.SelectedFolder.FullPath}"
+                   TextTrimming="CharacterEllipsis"
+                   ToolTip="{Binding VideoFiles.SelectedFolder.FullPath}"/>
+
+                            <TextBlock Grid.Row="2"
+                   Margin="0,5,0,8"
+                   Foreground="#4B5563"
+                   Text="{Binding VideoFiles.StatusText}"/>
+
+                            <ListBox Grid.Row="3"
+                 ItemsSource="{Binding VideoFiles.Files}"
+                 BorderThickness="0"
+                 Background="Transparent"
+                 HorizontalContentAlignment="Stretch"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                 VirtualizingPanel.IsVirtualizing="True"
+                 VirtualizingPanel.VirtualizationMode="Recycling">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Padding="6"
+                            BorderBrush="#E5E7EB"
+                            BorderThickness="0,0,0,1"
+                            ToolTip="{Binding FullPath}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="80"/>
+                                                    <ColumnDefinition Width="120"/>
+                                                    <ColumnDefinition Width="150"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0"
+                                       Margin="0,0,8,0"
+                                       VerticalAlignment="Center"
+                                       Text="{Binding Name}"
+                                       TextTrimming="CharacterEllipsis"/>
+
+                                                <TextBlock Grid.Column="1"
+                                       Margin="0,0,8,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="#4B5563"
+                                       Text="{Binding Extension}"/>
+
+                                                <TextBlock Grid.Column="2"
+                                       Margin="0,0,8,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="#4B5563"
+                                       Text="{Binding SizeBytes,
+                                              StringFormat={}{0:N0} байт}"/>
+
+                                                <TextBlock Grid.Column="3"
+                                       VerticalAlignment="Center"
+                                       Foreground="#4B5563"
+                                       Text="{Binding LastWriteTimeUtc,
+                                              StringFormat={}{0:dd.MM.yyyy HH:mm}}"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </Border>
+
 
                 </Grid>
             </Border>
