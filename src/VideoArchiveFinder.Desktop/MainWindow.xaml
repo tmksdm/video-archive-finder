@@ -663,8 +663,10 @@ Text="{Binding Search.SearchText,
                    Foreground="#4B5563"
                    Text="{Binding VideoFiles.StatusText}"/>
 
-                            <ListBox Grid.Row="3"
-                 ItemsSource="{Binding VideoFiles.Files}"
+                            <ListBox x:Name="VideoFilesList"
+         Grid.Row="3"
+         ItemsSource="{Binding VideoFiles.Files}"
+         MouseDoubleClick="VideoFilesList_MouseDoubleClick"
                  BorderThickness="0"
                  Background="Transparent"
                  HorizontalContentAlignment="Stretch"

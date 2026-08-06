@@ -1,8 +1,11 @@
-﻿using System.Collections.ObjectModel;
+﻿using System.IO;
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using VideoArchiveFinder.Application.Search;
 using VideoArchiveFinder.Application.VideoFiles;
+using VideoArchiveFinder.Desktop.Services;
 
 namespace VideoArchiveFinder.Desktop.ViewModels;
 
@@ -11,6 +14,9 @@ public partial class FolderVideoFilesViewModel
 {
     private readonly IVideoFileIndexRepository
         _videoFileIndexRepository;
+
+    private readonly IWindowsShellService
+        _windowsShellService;
 
     private readonly ILogger<FolderVideoFilesViewModel>
         _logger;
@@ -31,10 +37,14 @@ public partial class FolderVideoFilesViewModel
 
     public FolderVideoFilesViewModel(
         IVideoFileIndexRepository videoFileIndexRepository,
+        IWindowsShellService windowsShellService,
         ILogger<FolderVideoFilesViewModel> logger)
     {
         _videoFileIndexRepository =
             videoFileIndexRepository;
+
+        _windowsShellService =
+            windowsShellService;
 
         _logger = logger;
     }
@@ -151,6 +161,52 @@ public partial class FolderVideoFilesViewModel
                 version,
                 currentCancellation);
         }
+    }
+
+    [RelayCommand]
+    private async Task OpenVideoAsync(
+        IndexedVideoFile? videoFile)
+    {
+        if (videoFile is null)
+        {
+            return;
+        }
+
+        if (!videoFile.IsAvailable ||
+            !await FileExistsAsync(videoFile.FullPath))
+        {
+            StatusText =
+                $"Видеофайл недоступен: {videoFile.Name}";
+
+            _logger.LogWarning(
+                "Video file is unavailable: {VideoPath}.",
+                videoFile.FullPath);
+
+            return;
+        }
+
+        try
+        {
+            _windowsShellService.OpenFile(
+                videoFile.FullPath);
+        }
+        catch (Exception exception)
+        {
+            StatusText =
+                $"Не удалось открыть видеофайл: {videoFile.Name}";
+
+            _logger.LogError(
+                exception,
+                "Could not open video file {VideoPath}.",
+                videoFile.FullPath);
+        }
+    }
+
+    private static Task<bool> FileExistsAsync(
+        string filePath)
+    {
+        return Task.Run(
+            () => File.Exists(filePath));
     }
 
     private void CompleteLoad(

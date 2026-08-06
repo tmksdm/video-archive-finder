@@ -2,6 +2,7 @@
 using System.Windows.Controls;
 using System.Windows.Input;
 using VideoArchiveFinder.Application.Search;
+using VideoArchiveFinder.Application.VideoFiles;
 using VideoArchiveFinder.Desktop.ViewModels;
 
 namespace VideoArchiveFinder.Desktop;
@@ -105,6 +106,30 @@ public partial class MainWindow : Window
         RoutedEventArgs e)
     {
         SetVideoFilesPanelVisible(false);
+    }
+
+    private void VideoFilesList_MouseDoubleClick(
+        object sender,
+        MouseButtonEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel ||
+            e.OriginalSource is not DependencyObject sourceElement ||
+            ItemsControl.ContainerFromElement(
+                VideoFilesList,
+                sourceElement) is not ListBoxItem videoItem ||
+            videoItem.DataContext is not IndexedVideoFile videoFile)
+        {
+            return;
+        }
+
+        if (viewModel.VideoFiles.OpenVideoCommand.CanExecute(
+                videoFile))
+        {
+            viewModel.VideoFiles.OpenVideoCommand.Execute(
+                videoFile);
+        }
+
+        e.Handled = true;
     }
 
 

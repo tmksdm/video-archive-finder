@@ -6,11 +6,21 @@ public sealed class WindowsShellService : IWindowsShellService
 {
     public void OpenFolder(string folderPath)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(folderPath);
+        OpenPath(folderPath);
+    }
+
+    public void OpenFile(string filePath)
+    {
+        OpenPath(filePath);
+    }
+
+    private static void OpenPath(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         Process.Start(new ProcessStartInfo
         {
-            FileName = folderPath,
+            FileName = path,
             UseShellExecute = true
         });
     }
