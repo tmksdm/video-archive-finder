@@ -10,6 +10,12 @@
         MinHeight="600"
         WindowStartupLocation="CenterScreen">
 
+    <Window.Resources>
+        <BooleanToVisibilityConverter
+        x:Key="BooleanToVisibilityConverter"/>
+    </Window.Resources>
+
+
     <Grid Background="#F3F4F6">
 
 
@@ -625,7 +631,12 @@ Text="{Binding Search.SearchText,
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
+
+
 
                                 <Button Grid.Column="0"
             Width="32"
@@ -647,6 +658,49 @@ Text="{Binding Search.SearchText,
                Text="{Binding VideoFiles.SelectedFolder.Name}"
                TextTrimming="CharacterEllipsis"
                ToolTip="{Binding VideoFiles.SelectedFolder.Name}"/>
+
+                                <Slider Grid.Column="2"
+        Width="120"
+        Margin="12,0,4,0"
+        VerticalAlignment="Center"
+        Minimum="160"
+        Maximum="360"
+        IsMoveToPointEnabled="True"
+        Value="{Binding VideoFiles.GridCardWidth,
+                        Mode=TwoWay,
+                        UpdateSourceTrigger=PropertyChanged}"
+        Visibility="{Binding VideoFiles.IsGridView,
+                             Converter={StaticResource BooleanToVisibilityConverter}}"
+        ToolTip="Размер карточек видео"
+        AutomationProperties.Name="Размер карточек видео"/>
+
+
+                                <Button Grid.Column="3"
+        Width="32"
+        Height="32"
+        Margin="8,0,0,0"
+        Padding="4"
+        Command="{Binding VideoFiles.ShowGridViewCommand}"
+        ToolTip="Показать видео сеткой"
+        AutomationProperties.Name="Показать видео сеткой">
+                                    <materialDesign:PackIcon Width="19"
+                             Height="19"
+                             Kind="ViewGrid"/>
+                                </Button>
+
+                                <Button Grid.Column="4"
+        Width="32"
+        Height="32"
+        Margin="4,0,0,0"
+        Padding="4"
+        Command="{Binding VideoFiles.ShowListViewCommand}"
+        ToolTip="Показать видео компактным списком"
+        AutomationProperties.Name="Показать видео компактным списком">
+                                    <materialDesign:PackIcon Width="19"
+                             Height="19"
+                             Kind="ViewList"/>
+                                </Button>
+
                             </Grid>
 
 
@@ -663,10 +717,104 @@ Text="{Binding Search.SearchText,
                    Foreground="#4B5563"
                    Text="{Binding VideoFiles.StatusText}"/>
 
+                            <ListBox x:Name="VideoFilesGrid"
+         Grid.Row="3"
+         ItemsSource="{Binding VideoFiles.Files}"
+         Visibility="{Binding VideoFiles.IsGridView,
+                              Converter={StaticResource BooleanToVisibilityConverter}}"
+         MouseDoubleClick="VideoFiles_MouseDoubleClick"
+         BorderThickness="0"
+         Background="Transparent"
+         HorizontalContentAlignment="Left"
+         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+         ScrollViewer.VerticalScrollBarVisibility="Auto">
+
+                                <ListBox.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel IsItemsHost="True"
+                       Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ListBox.ItemsPanel>
+
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="{x:Type ListBoxItem}">
+                                        <Setter Property="Width"
+        Value="{Binding DataContext.VideoFiles.GridCardWidth,
+                        RelativeSource={RelativeSource AncestorType={x:Type Window}}}"/>
+
+                                        <Setter Property="Margin"
+                    Value="4"/>
+                                        <Setter Property="Padding"
+                    Value="0"/>
+                                        <Setter Property="HorizontalContentAlignment"
+                    Value="Stretch"/>
+                                        <Setter Property="VerticalContentAlignment"
+                    Value="Stretch"/>
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="White"
+                    BorderBrush="#D1D5DB"
+                    BorderThickness="1"
+                    ToolTip="{Binding FullPath}">
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+
+
+
+                                                <Border Grid.Row="0"
+        Height="{Binding DataContext.VideoFiles.GridPreviewHeight,
+                         RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                            Background="#E5E7EB"
+                            BorderBrush="#D1D5DB"
+                            BorderThickness="0,0,0,1">
+                                                    <Grid>
+                                                        <materialDesign:PackIcon Width="42"
+                                                     Height="42"
+                                                     HorizontalAlignment="Center"
+                                                     VerticalAlignment="Center"
+                                                     Foreground="#6B7280"
+                                                     Kind="Movie"/>
+
+
+                                                    </Grid>
+                                                </Border>
+
+                                                <Grid Grid.Row="1"
+      Margin="10,8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <TextBlock Grid.Column="0"
+               FontWeight="SemiBold"
+               Text="{Binding Name}"
+               TextTrimming="CharacterEllipsis"
+               ToolTip="{Binding Name}"/>
+
+                                                    <!-- Продолжительность будет добавлена справа
+         после подключения FFprobe на этапе 5. -->
+                                                </Grid>
+
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+
                             <ListBox x:Name="VideoFilesList"
          Grid.Row="3"
          ItemsSource="{Binding VideoFiles.Files}"
-         MouseDoubleClick="VideoFilesList_MouseDoubleClick"
+         Visibility="{Binding VideoFiles.IsListView,
+                     Converter={StaticResource BooleanToVisibilityConverter}}"
+         MouseDoubleClick="VideoFiles_MouseDoubleClick"
                  BorderThickness="0"
                  Background="Transparent"
                  HorizontalContentAlignment="Stretch"

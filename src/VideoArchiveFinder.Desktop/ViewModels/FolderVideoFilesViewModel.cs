@@ -32,8 +32,18 @@ public partial class FolderVideoFilesViewModel
     private bool _isLoading;
 
     [ObservableProperty]
+    private bool _isGridView = true;
+
+    [ObservableProperty]
+    private double _gridCardWidth = 240;
+
+    public double GridPreviewHeight =>
+        GridCardWidth * 9d / 16d;
+
+    [ObservableProperty]
     private string _statusText =
         "Выберите папку в результатах поиска";
+
 
     public FolderVideoFilesViewModel(
         IVideoFileIndexRepository videoFileIndexRepository,
@@ -55,6 +65,8 @@ public partial class FolderVideoFilesViewModel
     } = [];
 
     public bool HasFiles => Files.Count > 0;
+    public bool IsListView => !IsGridView;
+
 
     public async Task SelectFolderAsync(
         FolderSearchTreeNode? folder,
@@ -162,6 +174,29 @@ public partial class FolderVideoFilesViewModel
                 currentCancellation);
         }
     }
+
+    [RelayCommand]
+    private void ShowGridView()
+    {
+        IsGridView = true;
+    }
+
+    [RelayCommand]
+    private void ShowListView()
+    {
+        IsGridView = false;
+    }
+
+    partial void OnIsGridViewChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsListView));
+    }
+
+    partial void OnGridCardWidthChanged(double value)
+    {
+        OnPropertyChanged(nameof(GridPreviewHeight));
+    }
+
 
     [RelayCommand]
     private async Task OpenVideoAsync(

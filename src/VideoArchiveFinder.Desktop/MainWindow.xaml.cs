@@ -108,14 +108,15 @@ public partial class MainWindow : Window
         SetVideoFilesPanelVisible(false);
     }
 
-    private void VideoFilesList_MouseDoubleClick(
+    private void VideoFiles_MouseDoubleClick(
         object sender,
         MouseButtonEventArgs e)
     {
         if (DataContext is not MainWindowViewModel viewModel ||
+            sender is not ListBox videoFilesList ||
             e.OriginalSource is not DependencyObject sourceElement ||
             ItemsControl.ContainerFromElement(
-                VideoFilesList,
+                videoFilesList,
                 sourceElement) is not ListBoxItem videoItem ||
             videoItem.DataContext is not IndexedVideoFile videoFile)
         {
@@ -131,6 +132,7 @@ public partial class MainWindow : Window
 
         e.Handled = true;
     }
+
 
 
     private void SetVideoFilesPanelVisible(bool isVisible)
