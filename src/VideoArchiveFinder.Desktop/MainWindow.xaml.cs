@@ -1,6 +1,7 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Threading;
 using VideoArchiveFinder.Application.Search;
 using VideoArchiveFinder.Application.VideoFiles;
 using VideoArchiveFinder.Desktop.ViewModels;
@@ -9,6 +10,8 @@ namespace VideoArchiveFinder.Desktop;
 
 public partial class MainWindow : Window
 {
+    private bool _isSynchronizingVideoSelection;
+
     public MainWindow(MainWindowViewModel viewModel)
     {
         InitializeComponent();
@@ -107,6 +110,96 @@ public partial class MainWindow : Window
     {
         SetVideoFilesPanelVisible(false);
     }
+
+    private void ShowGridViewButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        FocusVideoFilesControl(VideoFilesGrid);
+    }
+
+    private void ShowListViewButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        FocusVideoFilesControl(VideoFilesList);
+    }
+
+    private void GridCardWidthSlider_PreviewMouseLeftButtonUp(
+        object sender,
+        MouseButtonEventArgs e)
+    {
+        FocusVideoFilesControl(VideoFilesGrid);
+    }
+
+
+    private void FocusVideoFilesControl(
+        ListBox videoFilesControl)
+    {
+        Dispatcher.BeginInvoke(
+            DispatcherPriority.Input,
+            new Action(
+                () => videoFilesControl.Focus()));
+    }
+
+
+    private void VideoFiles_PreviewKeyDown(
+        object sender,
+        KeyEventArgs e)
+    {
+        if (sender is not ListBox videoFilesList ||
+            e.Key != Key.A ||
+            !Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            return;
+        }
+
+        videoFilesList.SelectAll();
+        e.Handled = true;
+    }
+
+    private void VideoFiles_SelectionChanged(
+        object sender,
+        SelectionChangedEventArgs e)
+    {
+        if (_isSynchronizingVideoSelection ||
+            sender is not ListBox sourceList)
+        {
+            return;
+        }
+
+        var targetList = ReferenceEquals(
+            sourceList,
+            VideoFilesGrid)
+                ? VideoFilesList
+                : VideoFilesGrid;
+
+        try
+        {
+            _isSynchronizingVideoSelection = true;
+
+            foreach (var removedItem in e.RemovedItems)
+            {
+                targetList.SelectedItems.Remove(
+                    removedItem);
+            }
+
+            foreach (var addedItem in e.AddedItems)
+            {
+                if (!targetList.SelectedItems.Contains(
+                        addedItem))
+                {
+                    targetList.SelectedItems.Add(
+                        addedItem);
+                }
+            }
+        }
+        finally
+        {
+            _isSynchronizingVideoSelection = false;
+        }
+    }
+
 
     private void VideoFiles_MouseDoubleClick(
         object sender,
