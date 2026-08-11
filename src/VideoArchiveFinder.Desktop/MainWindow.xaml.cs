@@ -12,6 +12,15 @@ public partial class MainWindow : Window
 {
     private bool _isSynchronizingVideoSelection;
 
+    private GridLength _videoModeSearchResultsWidth =
+        new(1.4, GridUnitType.Star);
+
+    private GridLength _videoModeVideoFilesWidth =
+        new(3.6, GridUnitType.Star);
+
+    private bool _isSearchResultsPanelHidden;
+
+
     public MainWindow(MainWindowViewModel viewModel)
     {
         InitializeComponent();
@@ -110,6 +119,24 @@ public partial class MainWindow : Window
     {
         SetVideoFilesPanelVisible(false);
     }
+
+    private void ToggleSearchResultsPanel_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (_isSearchResultsPanelHidden)
+        {
+            _isSearchResultsPanelHidden = false;
+            ApplyVideoModeLayout();
+            return;
+        }
+
+        RememberVideoModeColumnWidths();
+
+        _isSearchResultsPanelHidden = true;
+        ApplyVideoModeLayout();
+    }
+
 
     private void ShowGridViewButton_Click(
         object sender,
@@ -230,18 +257,94 @@ public partial class MainWindow : Window
 
     private void SetVideoFilesPanelVisible(bool isVisible)
     {
-        var searchVisibility = isVisible
-            ? Visibility.Collapsed
-            : Visibility.Visible;
+        if (isVisible)
+        {
+            VideoFilesPanel.Visibility = Visibility.Visible;
+            ApplyVideoModeLayout();
+            return;
+        }
 
-        SearchResultsTitle.Visibility = searchVisibility;
-        SearchResultsSummary.Visibility = searchVisibility;
-        SearchResultsTree.Visibility = searchVisibility;
+        RememberVideoModeColumnWidths();
 
-        VideoFilesPanel.Visibility = isVisible
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        SearchResultsPanel.Visibility = Visibility.Visible;
+        SearchResultsColumn.Width =
+            new GridLength(1, GridUnitType.Star);
+
+        SearchResultsSplitterColumn.Width =
+            new GridLength(0);
+
+        SearchResultsSplitter.Visibility =
+            Visibility.Collapsed;
+
+        VideoFilesColumn.Width =
+            new GridLength(0);
+
+        VideoFilesPanel.Visibility =
+            Visibility.Collapsed;
     }
+
+    private void ApplyVideoModeLayout()
+    {
+        VideoFilesPanel.Visibility = Visibility.Visible;
+
+        SearchResultsPanel.Visibility =
+            _isSearchResultsPanelHidden
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+
+        SearchResultsColumn.Width =
+            _isSearchResultsPanelHidden
+                ? new GridLength(0)
+                : _videoModeSearchResultsWidth;
+
+        SearchResultsSplitterColumn.Width =
+            _isSearchResultsPanelHidden
+                ? new GridLength(0)
+                : new GridLength(6);
+
+        SearchResultsSplitter.Visibility =
+            _isSearchResultsPanelHidden
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+
+        VideoFilesColumn.Width =
+            _isSearchResultsPanelHidden
+                ? new GridLength(1, GridUnitType.Star)
+                : _videoModeVideoFilesWidth;
+
+        CollapseSearchResultsIcon.Visibility =
+            _isSearchResultsPanelHidden
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+
+        ExpandSearchResultsIcon.Visibility =
+            _isSearchResultsPanelHidden
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+        ToggleSearchResultsButton.ToolTip =
+            _isSearchResultsPanelHidden
+                ? "Показать дерево результатов"
+                : "Скрыть дерево результатов";
+    }
+
+    private void RememberVideoModeColumnWidths()
+    {
+        if (_isSearchResultsPanelHidden ||
+            VideoFilesPanel.Visibility != Visibility.Visible ||
+            SearchResultsColumn.ActualWidth <= 0 ||
+            VideoFilesColumn.ActualWidth <= 0)
+        {
+            return;
+        }
+
+        _videoModeSearchResultsWidth =
+            SearchResultsColumn.Width;
+
+        _videoModeVideoFilesWidth =
+            VideoFilesColumn.Width;
+    }
+
 
 
 

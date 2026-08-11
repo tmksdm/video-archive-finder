@@ -445,15 +445,29 @@ Text="{Binding Search.SearchText,
         BorderBrush="#D1D5DB"
         BorderThickness="1">
                 <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition x:Name="SearchResultsColumn"
+                              Width="*"
+                              MinWidth="0"/>
+                        <ColumnDefinition x:Name="SearchResultsSplitterColumn"
+                              Width="0"/>
+                        <ColumnDefinition x:Name="VideoFilesColumn"
+                              Width="0"
+                              MinWidth="0"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Grid x:Name="SearchResultsPanel"
+              Grid.Column="0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
 
 
 
-                    <TextBlock x:Name="SearchResultsTitle"
+
+                        <TextBlock x:Name="SearchResultsTitle"
            Grid.Row="0"
            FontSize="17"
            FontWeight="SemiBold"
@@ -610,14 +624,26 @@ Text="{Binding Search.SearchText,
                                 </Border>
                             </HierarchicalDataTemplate>
                         </TreeView.ItemTemplate>
-                    </TreeView>
+                        </TreeView>
+                    </Grid>
 
+                    <GridSplitter x:Name="SearchResultsSplitter"
+                      Grid.Column="1"
+                      Width="6"
+                      HorizontalAlignment="Stretch"
+                      VerticalAlignment="Stretch"
+                      Background="Transparent"
+                      Cursor="SizeWE"
+                      ResizeBehavior="PreviousAndNext"
+                      ResizeDirection="Columns"
+                      ShowsPreview="True"
+                      Visibility="Collapsed"/>
 
                     <Border x:Name="VideoFilesPanel"
-        Grid.Row="0"
-        Grid.RowSpan="3"
-        Visibility="Collapsed"
-        BorderThickness="0">
+                Grid.Column="2"
+                Visibility="Collapsed"
+                BorderThickness="0">
+
 
                         <Grid Margin="8,8,4,0">
                             <Grid.RowDefinitions>
@@ -630,11 +656,13 @@ Text="{Binding Search.SearchText,
                             <Grid Grid.Row="0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
+
 
 
 
@@ -651,7 +679,33 @@ Text="{Binding Search.SearchText,
                                  Kind="ArrowLeft"/>
                                 </Button>
 
-                                <TextBlock Grid.Column="1"
+                                <Button x:Name="ToggleSearchResultsButton"
+        Grid.Column="1"
+        Width="32"
+        Height="32"
+        Margin="0,0,8,0"
+        Padding="4"
+        Click="ToggleSearchResultsPanel_Click"
+        ToolTip="Скрыть дерево результатов"
+        AutomationProperties.Name="Скрыть или показать дерево результатов">
+                                    <Grid>
+                                        <materialDesign:PackIcon
+            x:Name="CollapseSearchResultsIcon"
+            Width="19"
+            Height="19"
+            Kind="ChevronLeft"/>
+
+                                        <materialDesign:PackIcon
+            x:Name="ExpandSearchResultsIcon"
+            Width="19"
+            Height="19"
+            Kind="ChevronRight"
+            Visibility="Collapsed"/>
+                                    </Grid>
+                                </Button>
+
+
+                                <TextBlock Grid.Column="2"
                VerticalAlignment="Center"
                FontSize="17"
                FontWeight="SemiBold"
@@ -659,7 +713,7 @@ Text="{Binding Search.SearchText,
                TextTrimming="CharacterEllipsis"
                ToolTip="{Binding VideoFiles.SelectedFolder.Name}"/>
 
-                                <Slider Grid.Column="2"
+                                <Slider Grid.Column="3"
         Width="120"
         Margin="12,0,4,0"
         VerticalAlignment="Center"
@@ -676,7 +730,7 @@ Text="{Binding Search.SearchText,
         AutomationProperties.Name="Размер карточек видео"/>
 
 
-                                <Button Grid.Column="3"
+                                <Button Grid.Column="4"
         Width="32"
         Height="32"
         Margin="8,0,0,0"
@@ -690,7 +744,7 @@ Text="{Binding Search.SearchText,
                              Kind="ViewGrid"/>
                                 </Button>
 
-                                <Button Grid.Column="4"
+                                <Button Grid.Column="5"
         Width="32"
         Height="32"
         Margin="4,0,0,0"
