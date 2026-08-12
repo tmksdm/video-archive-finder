@@ -12,6 +12,8 @@ public partial class MainWindow : Window
 {
     private bool _isSynchronizingVideoSelection;
 
+    private bool _isArchiveSourcesFlyoutOpen;
+
     private GridLength _videoModeSearchResultsWidth =
         new(1.4, GridUnitType.Star);
 
@@ -26,6 +28,52 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = viewModel;
     }
+
+    private void ToggleArchiveSourcesFlyout_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        SetArchiveSourcesFlyoutOpen(
+            !_isArchiveSourcesFlyoutOpen);
+    }
+
+    private void ArchiveSourcesDismissLayer_PreviewMouseLeftButtonDown(
+        object sender,
+        MouseButtonEventArgs e)
+    {
+        SetArchiveSourcesFlyoutOpen(false);
+        e.Handled = true;
+    }
+
+    private void MainWindow_PreviewKeyDown(
+        object sender,
+        KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape ||
+            !_isArchiveSourcesFlyoutOpen)
+        {
+            return;
+        }
+
+        SetArchiveSourcesFlyoutOpen(false);
+        e.Handled = true;
+    }
+
+    private void SetArchiveSourcesFlyoutOpen(bool isOpen)
+    {
+        _isArchiveSourcesFlyoutOpen = isOpen;
+
+        ArchiveSourcesDismissLayer.Visibility =
+            isOpen
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+        ArchiveSourcesFlyout.Visibility =
+            isOpen
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+    }
+
 
     private void ArchiveSourceCard_PreviewMouseRightButtonDown(
         object sender,
