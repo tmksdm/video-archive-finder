@@ -30,6 +30,15 @@ public static class DependencyInjection
             BundledFfmpegToolsLocator>();
 
         services.AddSingleton<
+            IExternalProcessRunner,
+            SystemExternalProcessRunner>();
+
+        services.AddSingleton<
+            IFfprobeRunner,
+            FfprobeRunner>();
+
+
+        services.AddSingleton<
             IApplicationDataDirectoryProvider,
             LocalApplicationDataDirectoryProvider>();
 
