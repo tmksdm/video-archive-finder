@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using VideoArchiveFinder.Application.Search;
 using VideoArchiveFinder.Application.VideoFiles;
+using VideoArchiveFinder.Application.Settings;
 using VideoArchiveFinder.Desktop.Services;
 
 namespace VideoArchiveFinder.Desktop.ViewModels;
@@ -17,6 +18,9 @@ public partial class FolderVideoFilesViewModel
 
     private readonly IWindowsShellService
         _windowsShellService;
+
+    private readonly IUserSettingsStore
+        _userSettingsStore;
 
     private readonly ILogger<FolderVideoFilesViewModel>
         _logger;
@@ -35,7 +39,9 @@ public partial class FolderVideoFilesViewModel
     private bool _isGridView = true;
 
     [ObservableProperty]
-    private double _gridCardWidth = 240;
+    private double _gridCardWidth =
+        UserSettings.DefaultGridCardWidth;
+
 
     public double GridPreviewHeight =>
         GridCardWidth * 9d / 16d;
@@ -48,7 +54,9 @@ public partial class FolderVideoFilesViewModel
     public FolderVideoFilesViewModel(
         IVideoFileIndexRepository videoFileIndexRepository,
         IWindowsShellService windowsShellService,
+        IUserSettingsStore userSettingsStore,
         ILogger<FolderVideoFilesViewModel> logger)
+
     {
         _videoFileIndexRepository =
             videoFileIndexRepository;
@@ -56,8 +64,75 @@ public partial class FolderVideoFilesViewModel
         _windowsShellService =
             windowsShellService;
 
+        _userSettingsStore =
+            userSettingsStore;
+
         _logger = logger;
+
     }
+
+    public async Task LoadSettingsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var settings =
+                await _userSettingsStore.LoadAsync(
+                    cancellationToken);
+
+            IsGridView =
+                settings.VideoFilesViewMode ==
+                VideoFilesViewMode.Grid;
+
+            GridCardWidth =
+                settings.GridCardWidth;
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Could not load video view settings.");
+        }
+    }
+
+    public async Task SaveSettingsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var settings = new UserSettings
+        {
+            VideoFilesViewMode =
+                IsGridView
+                    ? VideoFilesViewMode.Grid
+                    : VideoFilesViewMode.List,
+
+            GridCardWidth =
+                GridCardWidth
+        };
+
+        try
+        {
+            await _userSettingsStore.SaveAsync(
+                settings,
+                cancellationToken);
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Could not save video view settings.");
+        }
+    }
+
 
     public ObservableCollection<IndexedVideoFile> Files
     {

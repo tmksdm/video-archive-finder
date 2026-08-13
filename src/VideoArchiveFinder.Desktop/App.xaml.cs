@@ -64,7 +64,9 @@ public partial class App : System.Windows.Application
         var viewModel =
             _host.Services.GetRequiredService<MainWindowViewModel>();
 
+        await viewModel.VideoFiles.LoadSettingsAsync();
         await viewModel.InitializeAsync();
+
 
         var mainWindow =
             _host.Services.GetRequiredService<MainWindow>();
@@ -82,9 +84,18 @@ public partial class App : System.Windows.Application
 
         if (_host is not null)
         {
+            var viewModel =
+                _host.Services.GetService<MainWindowViewModel>();
+
+            if (viewModel is not null)
+            {
+                await viewModel.VideoFiles.SaveSettingsAsync();
+            }
+
             await _host.StopAsync();
             _host.Dispose();
         }
+
 
         await Log.CloseAndFlushAsync();
         base.OnExit(e);

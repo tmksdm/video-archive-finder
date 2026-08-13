@@ -8,6 +8,9 @@ using VideoArchiveFinder.Infrastructure.Storage;
 using VideoArchiveFinder.Infrastructure.Search;
 using VideoArchiveFinder.Application.Search;
 using VideoArchiveFinder.Application.VideoFiles;
+using VideoArchiveFinder.Application.Settings;
+using VideoArchiveFinder.Infrastructure.Settings;
+
 
 
 
@@ -21,6 +24,10 @@ public static class DependencyInjection
         services.AddSingleton<
             IApplicationDataDirectoryProvider,
             LocalApplicationDataDirectoryProvider>();
+
+        services.AddSingleton<
+            IUserSettingsStore,
+            JsonUserSettingsStore>();
 
         services.AddSingleton<IndexDatabasePathProvider>();
 
