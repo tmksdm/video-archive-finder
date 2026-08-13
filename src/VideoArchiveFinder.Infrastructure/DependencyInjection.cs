@@ -10,6 +10,9 @@ using VideoArchiveFinder.Application.Search;
 using VideoArchiveFinder.Application.VideoFiles;
 using VideoArchiveFinder.Application.Settings;
 using VideoArchiveFinder.Infrastructure.Settings;
+using VideoArchiveFinder.Application.ExternalTools;
+using VideoArchiveFinder.Infrastructure.ExternalTools;
+
 
 
 
@@ -21,6 +24,11 @@ public static class DependencyInjection
     public static IServiceCollection AddVideoArchiveFinderInfrastructure(
         this IServiceCollection services)
     {
+
+        services.AddSingleton<
+            IFfmpegToolsLocator,
+            BundledFfmpegToolsLocator>();
+
         services.AddSingleton<
             IApplicationDataDirectoryProvider,
             LocalApplicationDataDirectoryProvider>();
