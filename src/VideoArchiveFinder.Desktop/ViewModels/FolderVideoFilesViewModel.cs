@@ -103,19 +103,23 @@ public partial class FolderVideoFilesViewModel
     public async Task SaveSettingsAsync(
         CancellationToken cancellationToken = default)
     {
-        var settings = new UserSettings
-        {
-            VideoFilesViewMode =
-                IsGridView
-                    ? VideoFilesViewMode.Grid
-                    : VideoFilesViewMode.List,
-
-            GridCardWidth =
-                GridCardWidth
-        };
-
         try
         {
+            var currentSettings =
+                await _userSettingsStore.LoadAsync(
+                    cancellationToken);
+
+            var settings = currentSettings with
+            {
+                VideoFilesViewMode =
+                    IsGridView
+                        ? VideoFilesViewMode.Grid
+                        : VideoFilesViewMode.List,
+
+                GridCardWidth =
+                    GridCardWidth
+            };
+
             await _userSettingsStore.SaveAsync(
                 settings,
                 cancellationToken);
@@ -132,6 +136,7 @@ public partial class FolderVideoFilesViewModel
                 "Could not save video view settings.");
         }
     }
+
 
 
     public ObservableCollection<IndexedVideoFile> Files

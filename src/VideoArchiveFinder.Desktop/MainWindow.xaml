@@ -1,6 +1,7 @@
 ﻿<Window x:Class="VideoArchiveFinder.Desktop.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         xmlns:controls="clr-namespace:VideoArchiveFinder.Desktop.Controls"
         Title="Video Archive Finder"
@@ -9,41 +10,185 @@
         MinWidth="900"
         MinHeight="600"
         WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+ResizeMode="CanResize"
+UseLayoutRounding="True"
+SnapsToDevicePixels="True"
+StateChanged="MainWindow_StateChanged"
         PreviewKeyDown="MainWindow_PreviewKeyDown">
+
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="32"
+                            ResizeBorderThickness="6"
+                            GlassFrameThickness="0"
+                            CornerRadius="0"
+                            UseAeroCaptionButtons="False"/>
+    </shell:WindowChrome.WindowChrome>
+
 
     <Window.Resources>
         <BooleanToVisibilityConverter
-        x:Key="BooleanToVisibilityConverter"/>
+            x:Key="BooleanToVisibilityConverter"/>
+
+        <SolidColorBrush x:Key="CaptionButtonHoverBrush"
+                         Color="{DynamicResource AppHoverColor}"/>
+
+        <SolidColorBrush x:Key="CaptionButtonPressedBrush"
+                         Color="{DynamicResource AppSelectionColor}"/>
+
+        <Style x:Key="CaptionButtonStyle"
+               TargetType="{x:Type Button}">
+            <Setter Property="Width"
+                    Value="46"/>
+            <Setter Property="Height"
+                    Value="32"/>
+            <Setter Property="Padding"
+                    Value="0"/>
+            <Setter Property="BorderThickness"
+                    Value="0"/>
+            <Setter Property="Background"
+                    Value="Transparent"/>
+            <Setter Property="Foreground"
+                    Value="{DynamicResource AppPrimaryTextBrush}"/>
+            <Setter Property="FontFamily"
+                    Value="Segoe MDL2 Assets"/>
+            <Setter Property="FontSize"
+                    Value="10"/>
+            <Setter Property="Focusable"
+                    Value="False"/>
+            <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome"
+                    Value="True"/>
+
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Button}">
+                        <Border x:Name="ButtonBackground"
+                                Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver"
+                                     Value="True">
+                                <Setter TargetName="ButtonBackground"
+                                        Property="Background"
+                                        Value="{StaticResource CaptionButtonHoverBrush}"/>
+                            </Trigger>
+
+                            <Trigger Property="IsPressed"
+                                     Value="True">
+                                <Setter TargetName="ButtonBackground"
+                                        Property="Background"
+                                        Value="{StaticResource CaptionButtonPressedBrush}"/>
+                            </Trigger>
+
+                            <Trigger Property="IsEnabled"
+                                     Value="False">
+                                <Setter Property="Opacity"
+                                        Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
 
-    <Grid Background="#F3F4F6">
 
-
+    <Grid Background="{DynamicResource AppWindowBackgroundBrush}">
         <Grid.RowDefinitions>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="*"/>
-        <RowDefinition Height="Auto"/>
-    </Grid.RowDefinitions>
+            <RowDefinition Height="32"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-
-
-    <Border Grid.Row="0"
-                Padding="12"
-                Background="White"
-                BorderBrush="#D1D5DB"
+        <Border Grid.Row="0"
+                Background="{DynamicResource AppSurfaceBrush}"
+                BorderBrush="{DynamicResource AppBorderBrush}"
                 BorderThickness="0,0,0,1">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
+                <TextBlock Grid.Column="0"
+                           Margin="12,0,8,0"
+                           VerticalAlignment="Center"
+                           FontSize="12"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource AppPrimaryTextBrush}"
+                           Text="{Binding Title,
+                                          RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding Title,
+                                             RelativeSource={RelativeSource AncestorType={x:Type Window}}}"/>
+
+                <StackPanel Grid.Column="1"
+                            HorizontalAlignment="Right"
+                            Orientation="Horizontal">
+                    <Button Style="{StaticResource CaptionButtonStyle}"
+                            Content="&#xE921;"
+                            Click="MinimizeCaptionButton_Click"
+                            ToolTip="Свернуть"
+                            AutomationProperties.Name="Свернуть окно"/>
+
+                    <Button x:Name="MaximizeRestoreCaptionButton"
+                            Style="{StaticResource CaptionButtonStyle}"
+                            Click="MaximizeRestoreCaptionButton_Click"
+                            ToolTip="Развернуть"
+                            AutomationProperties.Name="Развернуть или восстановить окно">
+                        <Grid>
+                            <TextBlock x:Name="MaximizeCaptionIcon"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="10"
+                                       Text="&#xE922;"/>
+
+                            <TextBlock x:Name="RestoreCaptionIcon"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="10"
+                                       Text="&#xE923;"
+                                       Visibility="Collapsed"/>
+                        </Grid>
+                    </Button>
+
+                    <Button Style="{StaticResource CaptionButtonStyle}"
+                            Content="&#xE8BB;"
+                            Click="CloseCaptionButton_Click"
+                            ToolTip="Закрыть"
+                            AutomationProperties.Name="Закрыть окно"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1"
+              Background="{DynamicResource AppWindowBackgroundBrush}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
 
-                <TextBox Grid.Column="0"
+
+
+            <Border Grid.Row="0"
+                Padding="12"
+                Background="{DynamicResource AppSurfaceBrush}"
+                BorderBrush="{DynamicResource AppBorderBrush}"
+                BorderThickness="0,0,0,1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+
+
+                    <TextBox Grid.Column="0"
                          Height="40"
                          Padding="12,6"
                          VerticalContentAlignment="Center"
@@ -52,7 +197,7 @@ Text="{Binding Search.SearchText,
                UpdateSourceTrigger=PropertyChanged}"
                          ToolTip="Поиск по названиям папок"/>
 
-                <ComboBox Grid.Column="1"
+                    <ComboBox Grid.Column="1"
           Width="160"
           Height="40"
           Margin="8,0,0,0"
@@ -66,7 +211,7 @@ Text="{Binding Search.SearchText,
           ToolTip="Режим поиска"
           AutomationProperties.Name="Режим поиска"/>
 
-                <Button x:Name="ArchiveSourcesButton"
+                    <Button x:Name="ArchiveSourcesButton"
         Grid.Column="2"
         Width="40"
         Height="40"
@@ -74,34 +219,71 @@ Text="{Binding Search.SearchText,
         Click="ToggleArchiveSourcesFlyout_Click"
         ToolTip="Источники архива"
         AutomationProperties.Name="Источники архива">
-                    <materialDesign:PackIcon Width="20"
+                        <materialDesign:PackIcon Width="20"
                              Height="20"
                              Kind="Folder"/>
-                </Button>
+                    </Button>
 
 
-                <Button Grid.Column="3"
+                    <Button x:Name="SettingsButton"
+        Grid.Column="3"
         Width="40"
         Height="40"
         Margin="8,0,0,0"
+        Click="OpenSettingsMenu_Click"
         ToolTip="Настройки"
         AutomationProperties.Name="Настройки">
-                    <materialDesign:PackIcon Kind="Cog"
+
+                        <Button.ContextMenu>
+                            <ContextMenu x:Name="SettingsContextMenu"
+                     Placement="Bottom">
+
+                                <MenuItem Header="Тема приложения"
+                      IsEnabled="False"/>
+
+                                <Separator/>
+
+                                <MenuItem x:Name="SystemThemeMenuItem"
+                      Header="Системная"
+                      IsCheckable="True"
+                      Click="SetSystemTheme_Click"
+                      ToolTip="Использовать тему приложений Windows"
+                      AutomationProperties.Name="Системная тема"/>
+
+                                <MenuItem x:Name="LightThemeMenuItem"
+                      Header="Светлая"
+                      IsCheckable="True"
+                      Click="SetLightTheme_Click"
+                      ToolTip="Всегда использовать светлую тему"
+                      AutomationProperties.Name="Светлая тема"/>
+
+                                <MenuItem x:Name="DarkThemeMenuItem"
+                      Header="Тёмная"
+                      IsCheckable="True"
+                      Click="SetDarkTheme_Click"
+                      ToolTip="Всегда использовать тёмную тему"
+                      AutomationProperties.Name="Тёмная тема"/>
+
+                            </ContextMenu>
+                        </Button.ContextMenu>
+
+                        <materialDesign:PackIcon Kind="Cog"
                              Width="20"
                              Height="20"/>
-                </Button>
+                    </Button>
 
-            </Grid>
-        </Border>
 
-        <Grid Grid.Row="1"
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="1"
       Margin="12">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"
                           MinWidth="400"/>
-            </Grid.ColumnDefinitions>
+                </Grid.ColumnDefinitions>
 
-            <Border x:Name="ArchiveSourcesDismissLayer"
+                <Border x:Name="ArchiveSourcesDismissLayer"
         Grid.Column="0"
         Panel.ZIndex="9"
         Background="Transparent"
@@ -109,7 +291,7 @@ Text="{Binding Search.SearchText,
         PreviewMouseLeftButtonDown="ArchiveSourcesDismissLayer_PreviewMouseLeftButtonDown"/>
 
 
-            <Border x:Name="ArchiveSourcesFlyout"
+                <Border x:Name="ArchiveSourcesFlyout"
         Grid.Column="0"
         Width="400"
         Margin="0,0,48,0"
@@ -118,43 +300,43 @@ Text="{Binding Search.SearchText,
         VerticalAlignment="Stretch"
         Panel.ZIndex="10"
         Visibility="Collapsed"
-        Background="White"
-        BorderBrush="#D1D5DB"
+        Background="{DynamicResource AppSurfaceBrush}"
+        BorderBrush="{DynamicResource AppBorderBrush}"
         BorderThickness="1">
 
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
 
-                    <Grid Grid.Row="0"
+                        <Grid Grid.Row="0"
       Margin="0,0,0,12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
 
-                        <TextBlock Grid.Column="0"
+                            <TextBlock Grid.Column="0"
                VerticalAlignment="Center"
                FontSize="17"
                FontWeight="SemiBold"
                Text="Источники"/>
 
-                        <Button Grid.Column="1"
+                            <Button Grid.Column="1"
             Width="32"
             Height="32"
             Padding="4"
             Command="{Binding AddLocalFolderCommand}"
             ToolTip="Добавить локальную папку"
             AutomationProperties.Name="Добавить локальную папку">
-                            <materialDesign:PackIcon Width="19"
+                                <materialDesign:PackIcon Width="19"
                                  Height="19"
                                  Kind="FolderPlus"/>
-                        </Button>
+                            </Button>
 
-                        <Button Grid.Column="2"
+                            <Button Grid.Column="2"
             Width="32"
             Height="32"
             Margin="4,0,0,0"
@@ -162,65 +344,65 @@ Text="{Binding Search.SearchText,
             Command="{Binding AddUncPathCommand}"
             ToolTip="Добавить сетевой UNC-путь"
             AutomationProperties.Name="Добавить сетевой UNC-путь">
-                            <materialDesign:PackIcon Width="19"
+                                <materialDesign:PackIcon Width="19"
                                  Height="19"
                                  Kind="Lan"/>
-                        </Button>
-                    </Grid>
+                            </Button>
+                        </Grid>
 
 
 
 
-                    <Grid Grid.Row="1">
-                        <TextBlock HorizontalAlignment="Center"
+                        <Grid Grid.Row="1">
+                            <TextBlock HorizontalAlignment="Center"
                    VerticalAlignment="Center"
-                   Foreground="#6B7280"
+                   Foreground="{DynamicResource AppMutedTextBrush}"
                    TextAlignment="Center"
                    TextWrapping="Wrap"
                    Text="Загрузка источников архива...">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Visibility"
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility"
                             Value="Collapsed"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsLoadingSources}"
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsLoadingSources}"
                                      Value="True">
-                                            <Setter Property="Visibility"
+                                                <Setter Property="Visibility"
                                     Value="Visible"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
 
-                        <TextBlock HorizontalAlignment="Center"
+                            <TextBlock HorizontalAlignment="Center"
                    VerticalAlignment="Center"
-                   Foreground="#6B7280"
+                   Foreground="{DynamicResource AppMutedTextBrush}"
                    TextAlignment="Center"
                    TextWrapping="Wrap"
                    Text="Источники архива пока не добавлены">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Visibility"
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility"
                             Value="Visible"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsLoadingSources}"
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsLoadingSources}"
                                      Value="True">
-                                            <Setter Property="Visibility"
+                                                <Setter Property="Visibility"
                                     Value="Collapsed"/>
-                                        </DataTrigger>
+                                            </DataTrigger>
 
-                                        <DataTrigger Binding="{Binding HasSources}"
+                                            <DataTrigger Binding="{Binding HasSources}"
                                      Value="True">
-                                            <Setter Property="Visibility"
+                                                <Setter Property="Visibility"
                                     Value="Collapsed"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
 
-                        <ListBox x:Name="ArchiveSourcesList"
+                            <ListBox x:Name="ArchiveSourcesList"
          ItemsSource="{Binding Sources}"
          SelectionMode="Extended"
          PreviewKeyDown="ArchiveSourcesList_PreviewKeyDown"
@@ -232,25 +414,25 @@ Text="{Binding Search.SearchText,
                  VirtualizingPanel.IsVirtualizing="True"
                  VirtualizingPanel.VirtualizationMode="Recycling">
 
-                            <ListBox.Style>
-                                <Style TargetType="ListBox">
-                                    <Setter Property="Visibility"
+                                <ListBox.Style>
+                                    <Style TargetType="ListBox">
+                                        <Setter Property="Visibility"
                             Value="Collapsed"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding HasSources}"
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasSources}"
                                      Value="True">
-                                            <Setter Property="Visibility"
+                                                <Setter Property="Visibility"
                                     Value="Visible"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </ListBox.Style>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ListBox.Style>
 
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
 
 
-                                    <Grid Margin="4,6"
+                                        <Grid Margin="4,6"
       Background="Transparent"
       Tag="{Binding DataContext,
                     RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
@@ -258,253 +440,253 @@ Text="{Binding Search.SearchText,
 
 
 
-                                        <Grid.ContextMenu>
-                                            <ContextMenu>
-                                                <MenuItem Header="Индексировать папки"
+                                            <Grid.ContextMenu>
+                                                <ContextMenu>
+                                                    <MenuItem Header="Индексировать папки"
           ToolTip="Запустить или повторить индексирование папок источника"
           AutomationProperties.Name="Индексировать папки источника"
           Command="{Binding PlacementTarget.Tag.StartIndexingCommand,
                             RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
           CommandParameter="{Binding PlacementTarget.DataContext,
                                      RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}">
-                                                    <MenuItem.Icon>
-                                                        <materialDesign:PackIcon Kind="DatabaseRefreshOutline"/>
-                                                    </MenuItem.Icon>
-                                                </MenuItem>
+                                                        <MenuItem.Icon>
+                                                            <materialDesign:PackIcon Kind="DatabaseRefreshOutline"/>
+                                                        </MenuItem.Icon>
+                                                    </MenuItem>
 
-                                                <MenuItem Header="Отменить индексирование"
+                                                    <MenuItem Header="Отменить индексирование"
           ToolTip="Остановить текущее индексирование источника"
           AutomationProperties.Name="Отменить индексирование источника"
           Command="{Binding PlacementTarget.Tag.CancelIndexingCommand,
                             RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
           CommandParameter="{Binding PlacementTarget.DataContext,
                                      RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}">
-                                                    <MenuItem.Icon>
-                                                        <materialDesign:PackIcon Kind="Cancel"/>
-                                                    </MenuItem.Icon>
-                                                </MenuItem>
+                                                        <MenuItem.Icon>
+                                                            <materialDesign:PackIcon Kind="Cancel"/>
+                                                        </MenuItem.Icon>
+                                                    </MenuItem>
 
-                                                <Separator/>
+                                                    <Separator/>
 
-                                                <MenuItem Header="Открыть в Проводнике"
+                                                    <MenuItem Header="Открыть в Проводнике"
                   Command="{Binding PlacementTarget.Tag.OpenArchiveSourceCommand,
                                     RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
                   CommandParameter="{Binding PlacementTarget.DataContext,
                                              RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}">
-                                                    <MenuItem.Icon>
-                                                        <materialDesign:PackIcon Width="16"
+                                                        <MenuItem.Icon>
+                                                            <materialDesign:PackIcon Width="16"
                                          Height="16"
                                          Kind="FolderOpen"/>
-                                                    </MenuItem.Icon>
-                                                </MenuItem>
+                                                        </MenuItem.Icon>
+                                                    </MenuItem>
 
-                                                <MenuItem Header="Копировать полный путь"
+                                                    <MenuItem Header="Копировать полный путь"
           ToolTip="Копировать полный путь источника"
           AutomationProperties.Name="Копировать полный путь источника"
           Command="{Binding PlacementTarget.Tag.CopyArchiveSourcePathCommand,
                             RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
           CommandParameter="{Binding PlacementTarget.DataContext,
                                      RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}">
-                                                    <MenuItem.Icon>
-                                                        <materialDesign:PackIcon Width="16"
+                                                        <MenuItem.Icon>
+                                                            <materialDesign:PackIcon Width="16"
                                  Height="16"
                                  Kind="ContentCopy"/>
-                                                    </MenuItem.Icon>
-                                                </MenuItem>
+                                                        </MenuItem.Icon>
+                                                    </MenuItem>
 
 
-                                                <Separator/>
+                                                    <Separator/>
 
-                                                <MenuItem Header="Удалить выбранные источники из приложения…"
-                  Foreground="#B91C1C"
+                                                    <MenuItem Header="Удалить выбранные источники из приложения…"
+                  Foreground="{DynamicResource AppErrorBrush}"
                   Click="RemoveSelectedArchiveSources_Click">
-                                                    <MenuItem.Icon>
-                                                        <materialDesign:PackIcon Width="16"
+                                                        <MenuItem.Icon>
+                                                            <materialDesign:PackIcon Width="16"
                                          Height="16"
-                                         Foreground="#B91C1C"
+                                         Foreground="{DynamicResource AppErrorBrush}"
                                          Kind="Delete"/>
-                                                    </MenuItem.Icon>
-                                                </MenuItem>
-                                            </ContextMenu>
-                                        </Grid.ContextMenu>
+                                                        </MenuItem.Icon>
+                                                    </MenuItem>
+                                                </ContextMenu>
+                                            </Grid.ContextMenu>
 
 
 
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="Auto"/>
-                                        </Grid.RowDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
 
 
-                                        <TextBlock Grid.Row="0"
+                                            <TextBlock Grid.Row="0"
                        FontWeight="SemiBold"
                        Text="{Binding DisplayName}"
                        TextTrimming="CharacterEllipsis"
                        ToolTip="{Binding DisplayName}"/>
 
-                                        <StackPanel Grid.Row="1"
+                                            <StackPanel Grid.Row="1"
                         Margin="0,3,0,0"
                         Orientation="Horizontal">
-                                            <TextBlock VerticalAlignment="Center"
-                           Foreground="#6B7280"
+                                                <TextBlock VerticalAlignment="Center"
+                           Foreground="{DynamicResource AppMutedTextBrush}"
                            FontSize="12"
                            Text="{Binding SourceTypeShortText}"
                            ToolTip="{Binding SourceTypeText}"/>
 
-                                            <TextBlock Margin="8,0,5,0"
+                                                <TextBlock Margin="8,0,5,0"
                            VerticalAlignment="Center"
                            Foreground="{Binding AvailabilityColor}"
                            FontSize="12"
                            Text="●"
                            ToolTip="{Binding AvailabilityToolTip}"/>
 
-                                            <TextBlock VerticalAlignment="Center"
+                                                <TextBlock VerticalAlignment="Center"
                            Foreground="{Binding AvailabilityColor}"
                            FontSize="12"
                            Text="{Binding AvailabilityText}"
                            ToolTip="{Binding AvailabilityToolTip}"/>
-                                        </StackPanel>
+                                            </StackPanel>
 
-                                        <TextBlock Grid.Row="2"
+                                            <TextBlock Grid.Row="2"
                        Margin="0,3,0,0"
-                       Foreground="#4B5563"
+                       Foreground="{DynamicResource AppSecondaryTextBrush}"
                        FontSize="12"
                        Text="{Binding FullPath}"
                        TextTrimming="CharacterEllipsis"
                        ToolTip="{Binding FullPath}"/>
 
-                                        <StackPanel Grid.Row="3"
+                                            <StackPanel Grid.Row="3"
             Margin="0,5,0,0">
 
-                                            <ProgressBar Height="3"
+                                                <ProgressBar Height="3"
                  Margin="0,0,0,5"
                  IsIndeterminate="True">
-                                                <ProgressBar.Style>
-                                                    <Style TargetType="ProgressBar">
-                                                        <Setter Property="Visibility"
+                                                    <ProgressBar.Style>
+                                                        <Style TargetType="ProgressBar">
+                                                            <Setter Property="Visibility"
                         Value="Collapsed"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsIndexing}"
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsIndexing}"
                                  Value="True">
-                                                                <Setter Property="Visibility"
+                                                                    <Setter Property="Visibility"
                                 Value="Visible"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </ProgressBar.Style>
-                                            </ProgressBar>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </ProgressBar.Style>
+                                                </ProgressBar>
 
-                                            <TextBlock FontSize="12"
+                                                <TextBlock FontSize="12"
                FontWeight="SemiBold"
-               Foreground="#374151"
-               Text="{Binding IndexingStatusText}"
+Foreground="{DynamicResource AppSecondaryTextBrush}"
+Text="{Binding IndexingStatusText}"
                TextTrimming="CharacterEllipsis"
                ToolTip="{Binding IndexingStatusText}"/>
 
-                                            <TextBlock Margin="0,2,0,0"
+                                                <TextBlock Margin="0,2,0,0"
                FontSize="11"
-               Foreground="#6B7280"
+               Foreground="{DynamicResource AppMutedTextBrush}"
                Text="{Binding IndexingSummaryText}"
                TextTrimming="CharacterEllipsis"
                ToolTip="{Binding IndexingSummaryText}">
-                                                <TextBlock.Style>
-                                                    <Style TargetType="TextBlock">
-                                                        <Setter Property="Visibility"
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Visibility"
                         Value="Collapsed"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding HasIndexingDetails}"
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasIndexingDetails}"
                                  Value="True">
-                                                                <Setter Property="Visibility"
+                                                                    <Setter Property="Visibility"
                                 Value="Visible"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </TextBlock.Style>
-                                            </TextBlock>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
 
-                                            <TextBlock Margin="0,2,0,0"
+                                                <TextBlock Margin="0,2,0,0"
                FontSize="11"
-               Foreground="#6B7280"
+               Foreground="{DynamicResource AppMutedTextBrush}"
                Text="{Binding CurrentIndexingPath}"
                TextTrimming="CharacterEllipsis"
                ToolTip="{Binding CurrentIndexingPath}">
-                                                <TextBlock.Style>
-                                                    <Style TargetType="TextBlock">
-                                                        <Setter Property="Visibility"
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Visibility"
                         Value="Collapsed"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding HasCurrentIndexingPath}"
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasCurrentIndexingPath}"
                                  Value="True">
-                                                                <Setter Property="Visibility"
+                                                                    <Setter Property="Visibility"
                                 Value="Visible"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </TextBlock.Style>
-                                            </TextBlock>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
 
-                                        </StackPanel>
-
-
+                                            </StackPanel>
 
 
-                                    </Grid>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
 
 
-                        </ListBox>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+
+
+                            </ListBox>
+                        </Grid>
                     </Grid>
-                </Grid>
 
-            </Border>
+                </Border>
 
 
-            <Border Grid.Column="0"
+                <Border Grid.Column="0"
         Padding="12"
-        Background="White"
-        BorderBrush="#D1D5DB"
+        Background="{DynamicResource AppSurfaceBrush}"
+        BorderBrush="{DynamicResource AppBorderBrush}"
         BorderThickness="1">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition x:Name="SearchResultsColumn"
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition x:Name="SearchResultsColumn"
                               Width="*"
                               MinWidth="0"/>
-                        <ColumnDefinition x:Name="SearchResultsSplitterColumn"
+                            <ColumnDefinition x:Name="SearchResultsSplitterColumn"
                               Width="0"/>
-                        <ColumnDefinition x:Name="VideoFilesColumn"
+                            <ColumnDefinition x:Name="VideoFilesColumn"
                               Width="0"
                               MinWidth="0"/>
-                    </Grid.ColumnDefinitions>
+                        </Grid.ColumnDefinitions>
 
-                    <Grid x:Name="SearchResultsPanel"
+                        <Grid x:Name="SearchResultsPanel"
               Grid.Column="0">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
 
 
 
 
-                        <TextBlock x:Name="SearchResultsTitle"
+                            <TextBlock x:Name="SearchResultsTitle"
            Grid.Row="0"
            FontSize="17"
            FontWeight="SemiBold"
            Text="Результаты поиска"/>
 
 
-                    <TextBlock x:Name="SearchResultsSummary"
+                            <TextBlock x:Name="SearchResultsSummary"
            Grid.Row="1"
            Margin="0,8,0,10"
-           Foreground="#4B5563"
+           Foreground="{DynamicResource AppSecondaryTextBrush}"
            Text="{Binding Search.ResultsSummary}"/>
 
 
-                    <TreeView x:Name="SearchResultsTree"
+                            <TreeView x:Name="SearchResultsTree"
           Grid.Row="2"
           ItemsSource="{Binding Search.Results}"
           BorderThickness="0"
@@ -517,140 +699,145 @@ Text="{Binding Search.SearchText,
           VirtualizingPanel.VirtualizationMode="Recycling">
 
 
-                        <TreeView.Resources>
-                            <SolidColorBrush
+                                <TreeView.Resources>
+                                    <SolidColorBrush
         x:Key="{x:Static SystemColors.HighlightBrushKey}"
-        Color="#DBEAFE"/>
+        Color="{DynamicResource AppSelectionColor}"/>
 
-                            <SolidColorBrush
+                                    <SolidColorBrush
         x:Key="{x:Static SystemColors.HighlightTextBrushKey}"
-        Color="#111827"/>
+        Color="{DynamicResource AppPrimaryTextColor}"/>
 
-                            <SolidColorBrush
+                                    <SolidColorBrush
         x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}"
-        Color="#E5E7EB"/>
+        Color="{DynamicResource AppHoverColor}"/>
 
-                            <SolidColorBrush
+                                    <SolidColorBrush
         x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}"
-        Color="#111827"/>
-                        </TreeView.Resources>
+        Color="{DynamicResource AppPrimaryTextColor}"/>
+                                </TreeView.Resources>
 
 
-                        <TreeView.ItemContainerStyle>
-                            <Style TargetType="TreeViewItem">
-                                <Setter Property="IsExpanded"
+
+                                <TreeView.ItemContainerStyle>
+                                    <Style TargetType="TreeViewItem">
+                                        <Setter Property="IsExpanded"
                     Value="True"/>
-                                <Setter Property="HorizontalContentAlignment"
+                                        <Setter Property="HorizontalContentAlignment"
                     Value="Stretch"/>
-                                <Setter Property="Padding"
+                                        <Setter Property="Padding"
                     Value="0"/>
-                                <Setter Property="Margin"
+                                        <Setter Property="Margin"
                     Value="0"/>
-                            </Style>
-                        </TreeView.ItemContainerStyle>
+                                    </Style>
+                                </TreeView.ItemContainerStyle>
 
-                        <TreeView.ItemTemplate>
-                            <HierarchicalDataTemplate
+                                <TreeView.ItemTemplate>
+                                    <HierarchicalDataTemplate
             ItemsSource="{Binding Children}">
 
-                            <Border
+                                        <Border
     PreviewMouseLeftButtonDown="FolderSearchNode_PreviewMouseLeftButtonDown" Padding="6,5"
                     Background="Transparent"
                     ToolTip="{Binding FullPath}">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
 
-                                        <materialDesign:PackIcon
+                                                <materialDesign:PackIcon
                         Grid.Column="0"
                         Width="17"
                         Height="17"
                         Margin="0,1,7,0"
                         VerticalAlignment="Top"
                         Kind="FolderOutline">
-                                            <materialDesign:PackIcon.Style>
-                                                <Style TargetType="materialDesign:PackIcon">
-                                                    <Setter Property="Foreground"
-                                        Value="#9CA3AF"/>
+                                                    <materialDesign:PackIcon.Style>
+                                                        <Style TargetType="materialDesign:PackIcon">
+                                                            <Setter Property="Foreground"
+        Value="{DynamicResource AppMutedTextBrush}"/>
 
-                                                    <Style.Triggers>
-                                                        <DataTrigger
+
+                                                            <Style.Triggers>
+                                                                <DataTrigger
                                         Binding="{Binding IsMatch}"
                                         Value="True">
-                                                            <Setter Property="Kind"
+                                                                    <Setter Property="Kind"
                                                 Value="FolderSearchOutline"/>
-                                                            <Setter Property="Foreground"
-                                                Value="#2563EB"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </materialDesign:PackIcon.Style>
-                                        </materialDesign:PackIcon>
+                                                                    <Setter Property="Foreground"
+        Value="{DynamicResource AppSelectionAccentBrush}"/>
 
-                                        <StackPanel Grid.Column="1">
-                                            <controls:HighlightedTextBlock
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </materialDesign:PackIcon.Style>
+                                                </materialDesign:PackIcon>
+
+                                                <StackPanel Grid.Column="1">
+                                                    <controls:HighlightedTextBlock
                                    Segments="{Binding NameSegments}"
                                    AutomationProperties.Name="{Binding Name}"
                                    TextTrimming="CharacterEllipsis"
                                    ToolTip="{Binding FullPath}">
-                                                <controls:HighlightedTextBlock.Style>
-                                                    <Style TargetType="{x:Type controls:HighlightedTextBlock}">
-                                                        <Setter Property="FontSize"
+                                                        <controls:HighlightedTextBlock.Style>
+                                                            <Style TargetType="{x:Type controls:HighlightedTextBlock}">
+                                                                <Setter Property="FontSize"
                                             Value="14"/>
-                                                        <Setter Property="FontWeight"
+                                                                <Setter Property="FontWeight"
                                             Value="Normal"/>
-                                                        <Setter Property="Foreground"
-                                            Value="#6B7280"/>
+                                                                <Setter Property="Foreground"
+        Value="{DynamicResource AppMutedTextBrush}"/>
 
-                                                        <Style.Triggers>
-                                                            <DataTrigger
+
+                                                                <Style.Triggers>
+                                                                    <DataTrigger
                                             Binding="{Binding IsMatch}"
                                             Value="True">
-                                                                <Setter Property="FontSize"
+                                                                        <Setter Property="FontSize"
                                                     Value="15"/>
-                                                                <Setter Property="FontWeight"
+                                                                        <Setter Property="FontWeight"
                                                     Value="SemiBold"/>
-                                                                <Setter Property="Foreground"
-                                                    Value="#111827"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </controls:HighlightedTextBlock.Style>
-                                            </controls:HighlightedTextBlock>
+                                                                        <Setter Property="Foreground"
+        Value="{DynamicResource AppPrimaryTextBrush}"/>
 
-                                            <TextBlock Margin="0,3,0,0"
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </controls:HighlightedTextBlock.Style>
+                                                    </controls:HighlightedTextBlock>
+
+                                                    <TextBlock Margin="0,3,0,0"
                                    FontSize="12"
-                                   Foreground="#6B7280"
+                                   Foreground="{DynamicResource AppMutedTextBrush}"
                                    Text="{Binding FullPath}"
                                    TextTrimming="CharacterEllipsis"
                                    ToolTip="{Binding FullPath}">
-                                                <TextBlock.Style>
-                                                    <Style TargetType="TextBlock">
-                                                        <Setter Property="Visibility"
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Visibility"
                                             Value="Collapsed"/>
 
-                                                        <Style.Triggers>
-                                                            <DataTrigger
+                                                                <Style.Triggers>
+                                                                    <DataTrigger
                                             Binding="{Binding IsMatch}"
                                             Value="True">
-                                                                <Setter Property="Visibility"
+                                                                        <Setter Property="Visibility"
                                                     Value="Visible"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </TextBlock.Style>
-                                            </TextBlock>
-                                        </StackPanel>
-                                    </Grid>
-                                </Border>
-                            </HierarchicalDataTemplate>
-                        </TreeView.ItemTemplate>
-                        </TreeView>
-                    </Grid>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </HierarchicalDataTemplate>
+                                </TreeView.ItemTemplate>
+                            </TreeView>
+                        </Grid>
 
-                    <GridSplitter x:Name="SearchResultsSplitter"
+                        <GridSplitter x:Name="SearchResultsSplitter"
                       Grid.Column="1"
                       Width="6"
                       HorizontalAlignment="Stretch"
@@ -662,34 +849,34 @@ Text="{Binding Search.SearchText,
                       ShowsPreview="True"
                       Visibility="Collapsed"/>
 
-                    <Border x:Name="VideoFilesPanel"
+                        <Border x:Name="VideoFilesPanel"
                 Grid.Column="2"
                 Visibility="Collapsed"
                 BorderThickness="0">
 
 
-                        <Grid Margin="8,8,4,0">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*"/>
-                            </Grid.RowDefinitions>
+                            <Grid Margin="8,8,4,0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
 
-                            <Grid Grid.Row="0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-
-
+                                <Grid Grid.Row="0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
 
 
-                                <Button Grid.Column="0"
+
+
+                                    <Button Grid.Column="0"
             Width="32"
             Height="32"
             Margin="0,0,8,0"
@@ -697,12 +884,12 @@ Text="{Binding Search.SearchText,
             Click="ReturnToSearchResults_Click"
             ToolTip="Вернуться к результатам поиска"
             AutomationProperties.Name="Вернуться к результатам поиска">
-                                    <materialDesign:PackIcon Width="19"
+                                        <materialDesign:PackIcon Width="19"
                                  Height="19"
                                  Kind="ArrowLeft"/>
-                                </Button>
+                                    </Button>
 
-                                <Button x:Name="ToggleSearchResultsButton"
+                                    <Button x:Name="ToggleSearchResultsButton"
         Grid.Column="1"
         Width="32"
         Height="32"
@@ -711,24 +898,24 @@ Text="{Binding Search.SearchText,
         Click="ToggleSearchResultsPanel_Click"
         ToolTip="Скрыть дерево результатов"
         AutomationProperties.Name="Скрыть или показать дерево результатов">
-                                    <Grid>
-                                        <materialDesign:PackIcon
+                                        <Grid>
+                                            <materialDesign:PackIcon
             x:Name="CollapseSearchResultsIcon"
             Width="19"
             Height="19"
             Kind="ChevronLeft"/>
 
-                                        <materialDesign:PackIcon
+                                            <materialDesign:PackIcon
             x:Name="ExpandSearchResultsIcon"
             Width="19"
             Height="19"
             Kind="ChevronRight"
             Visibility="Collapsed"/>
-                                    </Grid>
-                                </Button>
+                                        </Grid>
+                                    </Button>
 
 
-                                <TextBlock Grid.Column="2"
+                                    <TextBlock Grid.Column="2"
                VerticalAlignment="Center"
                FontSize="17"
                FontWeight="SemiBold"
@@ -736,7 +923,7 @@ Text="{Binding Search.SearchText,
                TextTrimming="CharacterEllipsis"
                ToolTip="{Binding VideoFiles.SelectedFolder.Name}"/>
 
-                                <Slider Grid.Column="3"
+                                    <Slider Grid.Column="3"
         Width="120"
         Margin="12,0,4,0"
         VerticalAlignment="Center"
@@ -753,7 +940,7 @@ Text="{Binding Search.SearchText,
         AutomationProperties.Name="Размер карточек видео"/>
 
 
-                                <Button Grid.Column="4"
+                                    <Button Grid.Column="4"
         Width="32"
         Height="32"
         Margin="8,0,0,0"
@@ -762,12 +949,12 @@ Text="{Binding Search.SearchText,
         Click="ShowGridViewButton_Click"
         ToolTip="Показать видео сеткой"
         AutomationProperties.Name="Показать видео сеткой">
-                                    <materialDesign:PackIcon Width="19"
+                                        <materialDesign:PackIcon Width="19"
                              Height="19"
                              Kind="ViewGrid"/>
-                                </Button>
+                                    </Button>
 
-                                <Button Grid.Column="5"
+                                    <Button Grid.Column="5"
         Width="32"
         Height="32"
         Margin="4,0,0,0"
@@ -776,28 +963,28 @@ Text="{Binding Search.SearchText,
         Click="ShowListViewButton_Click"
         ToolTip="Показать видео компактным списком"
         AutomationProperties.Name="Показать видео компактным списком">
-                                    <materialDesign:PackIcon Width="19"
+                                        <materialDesign:PackIcon Width="19"
                              Height="19"
                              Kind="ViewList"/>
-                                </Button>
+                                    </Button>
 
-                            </Grid>
+                                </Grid>
 
 
-                            <TextBlock Grid.Row="1"
+                                <TextBlock Grid.Row="1"
                    Margin="0,3,0,0"
                    FontSize="12"
-                   Foreground="#6B7280"
+                   Foreground="{DynamicResource AppMutedTextBrush}"
                    Text="{Binding VideoFiles.SelectedFolder.FullPath}"
                    TextTrimming="CharacterEllipsis"
                    ToolTip="{Binding VideoFiles.SelectedFolder.FullPath}"/>
 
-                            <TextBlock Grid.Row="2"
+                                <TextBlock Grid.Row="2"
                    Margin="0,5,0,8"
-                   Foreground="#4B5563"
+                   Foreground="{DynamicResource AppSecondaryTextBrush}"
                    Text="{Binding VideoFiles.StatusText}"/>
 
-                            <ListBox x:Name="VideoFilesGrid"
+                                <ListBox x:Name="VideoFilesGrid"
          Grid.Row="3"
          ItemsSource="{Binding VideoFiles.Files}"
          SelectionMode="Extended"
@@ -812,87 +999,87 @@ Text="{Binding Search.SearchText,
          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
          ScrollViewer.VerticalScrollBarVisibility="Auto">
 
-                                <ListBox.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <WrapPanel IsItemsHost="True"
+                                    <ListBox.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel IsItemsHost="True"
                        Orientation="Horizontal"/>
-                                    </ItemsPanelTemplate>
-                                </ListBox.ItemsPanel>
+                                        </ItemsPanelTemplate>
+                                    </ListBox.ItemsPanel>
 
-                                <ListBox.ItemContainerStyle>
-                                    <Style TargetType="{x:Type ListBoxItem}">
-                                        <Setter Property="Width"
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="{x:Type ListBoxItem}">
+                                            <Setter Property="Width"
         Value="{Binding DataContext.VideoFiles.GridCardWidth,
                         RelativeSource={RelativeSource AncestorType={x:Type Window}}}"/>
 
-                                        <Setter Property="Margin"
+                                            <Setter Property="Margin"
                     Value="4"/>
-                                        <Setter Property="Padding"
+                                            <Setter Property="Padding"
                     Value="0"/>
-                                        <Setter Property="HorizontalContentAlignment"
+                                            <Setter Property="HorizontalContentAlignment"
                     Value="Stretch"/>
-                                        <Setter Property="VerticalContentAlignment"
+                                            <Setter Property="VerticalContentAlignment"
                     Value="Stretch"/>
-                                    </Style>
-                                </ListBox.ItemContainerStyle>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
 
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Background="White"
-                    BorderBrush="#D1D5DB"
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{DynamicResource AppSurfaceBrush}"
+                    BorderBrush="{DynamicResource AppBorderBrush}"
                     BorderThickness="1"
                     ToolTip="{Binding FullPath}">
-                                            <Grid>
-                                                <Grid.RowDefinitions>
-                                                    <RowDefinition Height="Auto"/>
-                                                    <RowDefinition Height="Auto"/>
-                                                </Grid.RowDefinitions>
+                                                <Grid>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
 
 
 
-                                                <Border Grid.Row="0"
+                                                    <Border Grid.Row="0"
         Height="{Binding DataContext.VideoFiles.GridPreviewHeight,
                          RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
-                            Background="#E5E7EB"
-                            BorderBrush="#D1D5DB"
+Background="{DynamicResource AppSurfaceAlternativeBrush}"
+BorderBrush="{DynamicResource AppBorderBrush}"
                             BorderThickness="0,0,0,1">
-                                                    <Grid>
-                                                        <materialDesign:PackIcon Width="42"
+                                                        <Grid>
+                                                            <materialDesign:PackIcon Width="42"
                                                      Height="42"
                                                      HorizontalAlignment="Center"
                                                      VerticalAlignment="Center"
-                                                     Foreground="#6B7280"
+                                                     Foreground="{DynamicResource AppMutedTextBrush}"
                                                      Kind="Movie"/>
 
 
-                                                    </Grid>
-                                                </Border>
+                                                        </Grid>
+                                                    </Border>
 
-                                                <Grid Grid.Row="1"
+                                                    <Grid Grid.Row="1"
       Margin="10,8">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*"/>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                    </Grid.ColumnDefinitions>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
 
-                                                    <TextBlock Grid.Column="0"
+                                                        <TextBlock Grid.Column="0"
                FontWeight="SemiBold"
                Text="{Binding Name}"
                TextTrimming="CharacterEllipsis"
                ToolTip="{Binding Name}"/>
 
-                                                    <!-- Продолжительность будет добавлена справа
+                                                        <!-- Продолжительность будет добавлена справа
          после подключения FFprobe на этапе 5. -->
+                                                    </Grid>
+
                                                 </Grid>
-
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
 
 
-                            <ListBox x:Name="VideoFilesList"
+                                <ListBox x:Name="VideoFilesList"
          Grid.Row="3"
          ItemsSource="{Binding VideoFiles.Files}"
          SelectionMode="Extended"
@@ -908,65 +1095,66 @@ Text="{Binding Search.SearchText,
                  ScrollViewer.VerticalScrollBarVisibility="Auto"
                  VirtualizingPanel.IsVirtualizing="True"
                  VirtualizingPanel.VirtualizationMode="Recycling">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Padding="6"
-                            BorderBrush="#E5E7EB"
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Padding="6"
+        BorderBrush="{DynamicResource AppBorderBrush}"
                             BorderThickness="0,0,0,1"
                             ToolTip="{Binding FullPath}">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="80"/>
-                                                    <ColumnDefinition Width="120"/>
-                                                    <ColumnDefinition Width="150"/>
-                                                </Grid.ColumnDefinitions>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="80"/>
+                                                        <ColumnDefinition Width="120"/>
+                                                        <ColumnDefinition Width="150"/>
+                                                    </Grid.ColumnDefinitions>
 
-                                                <TextBlock Grid.Column="0"
+                                                    <TextBlock Grid.Column="0"
                                        Margin="0,0,8,0"
                                        VerticalAlignment="Center"
                                        Text="{Binding Name}"
                                        TextTrimming="CharacterEllipsis"/>
 
-                                                <TextBlock Grid.Column="1"
+                                                    <TextBlock Grid.Column="1"
                                        Margin="0,0,8,0"
                                        VerticalAlignment="Center"
-                                       Foreground="#4B5563"
+                                       Foreground="{DynamicResource AppSecondaryTextBrush}"
                                        Text="{Binding Extension}"/>
 
-                                                <TextBlock Grid.Column="2"
+                                                    <TextBlock Grid.Column="2"
                                        Margin="0,0,8,0"
                                        VerticalAlignment="Center"
-                                       Foreground="#4B5563"
+                                       Foreground="{DynamicResource AppSecondaryTextBrush}"
                                        Text="{Binding SizeBytes,
                                               StringFormat={}{0:N0} байт}"/>
 
-                                                <TextBlock Grid.Column="3"
+                                                    <TextBlock Grid.Column="3"
                                        VerticalAlignment="Center"
-                                       Foreground="#4B5563"
+                                       Foreground="{DynamicResource AppSecondaryTextBrush}"
                                        Text="{Binding LastWriteTimeUtc,
                                               StringFormat={}{0:dd.MM.yyyy HH:mm}}"/>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </Grid>
-                    </Border>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Grid>
+                        </Border>
 
 
-                </Grid>
-            </Border>
+                    </Grid>
+                </Border>
 
-        </Grid>
+            </Grid>
 
-        <Border Grid.Row="2"
+            <Border Grid.Row="2"
                 Padding="12,6"
-                Background="White"
-                BorderBrush="#D1D5DB"
+                Background="{DynamicResource AppSurfaceBrush}"
+                BorderBrush="{DynamicResource AppBorderBrush}"
                 BorderThickness="0,1,0,0">
-            <TextBlock Foreground="#4B5563"
+                <TextBlock Foreground="{DynamicResource AppSecondaryTextBrush}"
                        Text="{Binding StatusText}"/>
-        </Border>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

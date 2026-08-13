@@ -18,6 +18,12 @@ public sealed record UserSettings
         init;
     } = DefaultGridCardWidth;
 
+    public AppThemeMode ThemeMode
+    {
+        get;
+        init;
+    } = AppThemeMode.System;
+
     public UserSettings Normalize()
     {
         var normalizedWidth =
@@ -33,10 +39,16 @@ public sealed record UserSettings
                 ? VideoFilesViewMode
                 : VideoFilesViewMode.Grid;
 
+        var normalizedThemeMode =
+            Enum.IsDefined(ThemeMode)
+                ? ThemeMode
+                : AppThemeMode.System;
+
         return this with
         {
             VideoFilesViewMode = normalizedViewMode,
-            GridCardWidth = normalizedWidth
+            GridCardWidth = normalizedWidth,
+            ThemeMode = normalizedThemeMode
         };
     }
 }
@@ -45,4 +57,11 @@ public enum VideoFilesViewMode
 {
     Grid,
     List
+}
+
+public enum AppThemeMode
+{
+    System,
+    Light,
+    Dark
 }

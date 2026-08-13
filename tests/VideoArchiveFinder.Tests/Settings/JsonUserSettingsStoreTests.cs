@@ -26,6 +26,10 @@ public sealed class JsonUserSettingsStoreTests
         Assert.Equal(
             UserSettings.DefaultGridCardWidth,
             settings.GridCardWidth);
+
+        Assert.Equal(
+            AppThemeMode.System,
+            settings.ThemeMode);
     }
 
     [Fact]
@@ -42,7 +46,10 @@ public sealed class JsonUserSettingsStoreTests
             VideoFilesViewMode =
                 VideoFilesViewMode.List,
 
-            GridCardWidth = 285
+            GridCardWidth = 285,
+
+            ThemeMode =
+                AppThemeMode.Dark
         };
 
         await store.SaveAsync(expected);
@@ -57,6 +64,10 @@ public sealed class JsonUserSettingsStoreTests
         Assert.Equal(
             expected.GridCardWidth,
             actual.GridCardWidth);
+
+        Assert.Equal(
+            expected.ThemeMode,
+            actual.ThemeMode);
 
         Assert.True(
             File.Exists(
@@ -92,6 +103,10 @@ public sealed class JsonUserSettingsStoreTests
         Assert.Equal(
             UserSettings.DefaultGridCardWidth,
             settings.GridCardWidth);
+
+        Assert.Equal(
+            AppThemeMode.System,
+            settings.ThemeMode);
     }
 
     [Fact]
@@ -111,7 +126,8 @@ public sealed class JsonUserSettingsStoreTests
               "SchemaVersion": 999,
               "Settings": {
                 "VideoFilesViewMode": "List",
-                "GridCardWidth": 300
+                "GridCardWidth": 300,
+                "ThemeMode": "Dark"
               }
             }
             """);
@@ -129,6 +145,10 @@ public sealed class JsonUserSettingsStoreTests
         Assert.Equal(
             UserSettings.DefaultGridCardWidth,
             settings.GridCardWidth);
+
+        Assert.Equal(
+            AppThemeMode.System,
+            settings.ThemeMode);
     }
 
     private static JsonUserSettingsStore CreateStore(

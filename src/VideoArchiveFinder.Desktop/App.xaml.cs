@@ -40,6 +40,9 @@ public partial class App : System.Windows.Application
                 services.AddVideoArchiveFinderInfrastructure();
                 services.AddSingleton<IWindowsShellService, WindowsShellService>();
                 services.AddSingleton<IClipboardService, WindowsClipboardService>();
+                services.AddSingleton<
+    IAppThemeService,
+    AppThemeService>();
                 services.AddSingleton<ILocalFolderPicker, WindowsLocalFolderPicker>();
                 services.AddSingleton<
                     IUncPathInputDialog,
@@ -55,6 +58,12 @@ public partial class App : System.Windows.Application
             .Build();
 
         await _host.StartAsync();
+
+        var appThemeService =
+            _host.Services.GetRequiredService<IAppThemeService>();
+
+        await appThemeService.InitializeAsync();
+
 
         var indexDatabaseInitializer =
             _host.Services.GetRequiredService<IIndexDatabaseInitializer>();

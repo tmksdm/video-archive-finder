@@ -1,0 +1,118 @@
+﻿<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Color x:Key="AppPrimaryTextColor">
+        #F9FAFB
+    </Color>
+
+    <Color x:Key="AppSelectionColor">
+        #1E3A5F
+    </Color>
+
+    <Color x:Key="AppHoverColor">
+        #374151
+    </Color>
+
+
+    <SolidColorBrush x:Key="AppWindowBackgroundBrush"
+                     Color="#111827"/>
+
+    <SolidColorBrush x:Key="AppSurfaceBrush"
+                     Color="#1F2937"/>
+
+    <SolidColorBrush x:Key="AppSurfaceAlternativeBrush"
+                     Color="#273449"/>
+
+    <SolidColorBrush x:Key="AppInputBackgroundBrush"
+                     Color="#111827"/>
+
+    <SolidColorBrush x:Key="AppBorderBrush"
+                     Color="#4B5563"/>
+
+    <SolidColorBrush x:Key="AppPrimaryTextBrush"
+                     Color="#F9FAFB"/>
+
+    <SolidColorBrush x:Key="AppSecondaryTextBrush"
+                     Color="#D1D5DB"/>
+
+    <SolidColorBrush x:Key="AppMutedTextBrush"
+                     Color="#9CA3AF"/>
+
+    <SolidColorBrush x:Key="AppHoverBrush"
+                     Color="#374151"/>
+
+    <SolidColorBrush x:Key="AppSelectionBrush"
+                     Color="#1E3A5F"/>
+
+    <SolidColorBrush x:Key="AppSelectionAccentBrush"
+                     Color="#60A5FA"/>
+
+    <SolidColorBrush x:Key="AppSelectionTextBrush"
+                     Color="#F9FAFB"/>
+
+    <SolidColorBrush x:Key="AppDisabledBrush"
+                     Color="#6B7280"/>
+
+    <SolidColorBrush x:Key="AppErrorBrush"
+                     Color="#F87171"/>
+
+    <SolidColorBrush x:Key="AppSuccessBrush"
+                     Color="#34D399"/>
+
+    <SolidColorBrush x:Key="AppOverlayBrush"
+                     Color="#99000000"/>
+
+    <SolidColorBrush x:Key="SearchHighlightBackgroundBrush"
+                     Color="#854D0E"/>
+
+    <SolidColorBrush x:Key="SearchHighlightForegroundBrush"
+                     Color="#FEF3C7"/>
+
+    <!-- Системные кисти стандартных элементов WPF. -->
+    <SolidColorBrush
+    x:Key="{x:Static SystemColors.WindowBrushKey}"
+    Color="#111827"/>
+
+    <SolidColorBrush
+    x:Key="{x:Static SystemColors.WindowTextBrushKey}"
+    Color="#F9FAFB"/>
+
+    <SolidColorBrush
+    x:Key="{x:Static SystemColors.ControlBrushKey}"
+    Color="#273449"/>
+
+    <SolidColorBrush
+    x:Key="{x:Static SystemColors.ControlTextBrushKey}"
+    Color="#F9FAFB"/>
+
+    <SolidColorBrush
+    x:Key="{x:Static SystemColors.GrayTextBrushKey}"
+    Color="#9CA3AF"/>
+
+    <SolidColorBrush
+    x:Key="{x:Static SystemColors.HighlightBrushKey}"
+    Color="#1E3A5F"/>
+
+    <SolidColorBrush
+    x:Key="{x:Static SystemColors.HighlightTextBrushKey}"
+    Color="#F9FAFB"/>
+
+    <SolidColorBrush
+    x:Key="{x:Static SystemColors.MenuBrushKey}"
+    Color="#1F2937"/>
+
+    <SolidColorBrush
+    x:Key="{x:Static SystemColors.MenuTextBrushKey}"
+    Color="#F9FAFB"/>
+
+    <SolidColorBrush
+    x:Key="{x:Static SystemColors.MenuBarBrushKey}"
+    Color="#1F2937"/>
+
+    <SolidColorBrush
+    x:Key="{x:Static SystemColors.MenuHighlightBrushKey}"
+    Color="#374151"/>
+
+
+</ResourceDictionary>

@@ -3,13 +3,19 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
 using VideoArchiveFinder.Application.Search;
+using VideoArchiveFinder.Application.Settings;
 using VideoArchiveFinder.Application.VideoFiles;
+using VideoArchiveFinder.Desktop.Services;
 using VideoArchiveFinder.Desktop.ViewModels;
+
 
 namespace VideoArchiveFinder.Desktop;
 
 public partial class MainWindow : Window
 {
+    private readonly IAppThemeService
+        _appThemeService;
+
     private bool _isSynchronizingVideoSelection;
 
     private bool _isArchiveSourcesFlyoutOpen;
@@ -23,11 +29,179 @@ public partial class MainWindow : Window
     private bool _isSearchResultsPanelHidden;
 
 
-    public MainWindow(MainWindowViewModel viewModel)
+    public MainWindow(
+        MainWindowViewModel viewModel,
+        IAppThemeService appThemeService)
     {
+        _appThemeService = appThemeService;
+
         InitializeComponent();
+
         DataContext = viewModel;
+
+        _appThemeService.ThemeChanged +=
+            AppThemeService_ThemeChanged;
+
+        Closed +=
+            MainWindow_Closed;
+
+        UpdateThemeMenuChecks();
+        UpdateCaptionState();
     }
+
+    private void MinimizeCaptionButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        SystemCommands.MinimizeWindow(this);
+    }
+
+    private void MaximizeRestoreCaptionButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (WindowState == WindowState.Maximized)
+        {
+            SystemCommands.RestoreWindow(this);
+            return;
+        }
+
+        SystemCommands.MaximizeWindow(this);
+    }
+
+    private void CloseCaptionButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        SystemCommands.CloseWindow(this);
+    }
+
+    private void MainWindow_StateChanged(
+        object? sender,
+        EventArgs e)
+    {
+        UpdateCaptionState();
+    }
+
+    private void UpdateCaptionState()
+    {
+        if (MaximizeCaptionIcon is null ||
+            RestoreCaptionIcon is null ||
+            MaximizeRestoreCaptionButton is null)
+        {
+            return;
+        }
+
+        var isMaximized =
+            WindowState == WindowState.Maximized;
+
+        MaximizeCaptionIcon.Visibility =
+            isMaximized
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+
+        RestoreCaptionIcon.Visibility =
+            isMaximized
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+        MaximizeRestoreCaptionButton.ToolTip =
+            isMaximized
+                ? "Восстановить"
+                : "Развернуть";
+    }
+
+
+    private void OpenSettingsMenu_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        UpdateThemeMenuChecks();
+
+        SettingsContextMenu.PlacementTarget =
+            SettingsButton;
+
+        SettingsContextMenu.IsOpen = true;
+    }
+
+    private async void SetSystemTheme_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        await SetThemeAsync(
+            AppThemeMode.System);
+    }
+
+    private async void SetLightTheme_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        await SetThemeAsync(
+            AppThemeMode.Light);
+    }
+
+    private async void SetDarkTheme_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        await SetThemeAsync(
+            AppThemeMode.Dark);
+    }
+
+    private async Task SetThemeAsync(
+        AppThemeMode mode)
+    {
+        try
+        {
+            await _appThemeService.SetThemeAsync(
+                mode);
+
+            UpdateThemeMenuChecks();
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(
+                this,
+                $"Не удалось изменить тему приложения.{Environment.NewLine}{Environment.NewLine}{exception.Message}",
+                "Video Archive Finder",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    private void UpdateThemeMenuChecks()
+    {
+        SystemThemeMenuItem.IsChecked =
+            _appThemeService.SelectedMode ==
+            AppThemeMode.System;
+
+        LightThemeMenuItem.IsChecked =
+            _appThemeService.SelectedMode ==
+            AppThemeMode.Light;
+
+        DarkThemeMenuItem.IsChecked =
+            _appThemeService.SelectedMode ==
+            AppThemeMode.Dark;
+    }
+
+    private void AppThemeService_ThemeChanged(
+        object? sender,
+        EventArgs e)
+    {
+        UpdateThemeMenuChecks();
+    }
+
+    private void MainWindow_Closed(
+        object? sender,
+        EventArgs e)
+    {
+        _appThemeService.ThemeChanged -=
+            AppThemeService_ThemeChanged;
+
+        Closed -=
+            MainWindow_Closed;
+    }
+
 
     private void ToggleArchiveSourcesFlyout_Click(
         object sender,
@@ -307,16 +481,27 @@ public partial class MainWindow : Window
     {
         if (isVisible)
         {
-            VideoFilesPanel.Visibility = Visibility.Visible;
-            ApplyVideoModeLayout();
+            if (VideoFilesPanel.Visibility !=
+                Visibility.Visible)
+            {
+                VideoFilesPanel.Visibility =
+                    Visibility.Visible;
+
+                ApplyVideoModeLayout();
+            }
+
             return;
         }
 
         RememberVideoModeColumnWidths();
 
-        SearchResultsPanel.Visibility = Visibility.Visible;
+        SearchResultsPanel.Visibility =
+            Visibility.Visible;
+
         SearchResultsColumn.Width =
-            new GridLength(1, GridUnitType.Star);
+            new GridLength(
+                1,
+                GridUnitType.Star);
 
         SearchResultsSplitterColumn.Width =
             new GridLength(0);
@@ -330,6 +515,7 @@ public partial class MainWindow : Window
         VideoFilesPanel.Visibility =
             Visibility.Collapsed;
     }
+
 
     private void ApplyVideoModeLayout()
     {

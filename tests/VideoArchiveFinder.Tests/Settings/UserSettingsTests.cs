@@ -12,7 +12,10 @@ public sealed class UserSettingsTests
             VideoFilesViewMode =
                 VideoFilesViewMode.List,
 
-            GridCardWidth = 275
+            GridCardWidth = 275,
+
+            ThemeMode =
+                AppThemeMode.Dark
         };
 
         var normalized = settings.Normalize();
@@ -24,6 +27,10 @@ public sealed class UserSettingsTests
         Assert.Equal(
             275,
             normalized.GridCardWidth);
+
+        Assert.Equal(
+            AppThemeMode.Dark,
+            normalized.ThemeMode);
     }
 
     [Theory]
@@ -74,5 +81,21 @@ public sealed class UserSettingsTests
         Assert.Equal(
             VideoFilesViewMode.Grid,
             normalized.VideoFilesViewMode);
+    }
+
+    [Fact]
+    public void Normalize_ReplacesUnknownThemeMode()
+    {
+        var settings = new UserSettings
+        {
+            ThemeMode =
+                (AppThemeMode)999
+        };
+
+        var normalized = settings.Normalize();
+
+        Assert.Equal(
+            AppThemeMode.System,
+            normalized.ThemeMode);
     }
 }
