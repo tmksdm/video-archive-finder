@@ -785,6 +785,15 @@ public sealed class FolderIndexingServiceTests
             return Task.FromResult<
                 IReadOnlyList<IndexedVideoFile>>([]);
         }
+
+        public Task<bool> UpdateAnalysisAsync(
+            VideoFileAnalysisUpdate update,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(false);
+        }
+
+
     }
 
     private sealed record VideoFolderScanCompletion(

@@ -285,6 +285,394 @@ public sealed class SqliteVideoFileIndexRepositoryTests
             protectedFile.Name);
     }
 
+    [Fact]
+    public async Task UpdateAnalysisAsync_StoresSuccessfulMetadata()
+    {
+        var repository = await CreateRepositoryAsync();
+
+        var sourceId = Guid.NewGuid();
+        var folderPath =
+            @"C:\Archive\Folder";
+        var videoPath =
+            @"C:\Archive\Folder\Video.mp4";
+
+        await repository.UpsertBatchAsync(
+        [
+            CreateFile(
+            fullPath: videoPath,
+            name: "Video.mp4",
+            folderFullPath: folderPath,
+            rootSourceId: sourceId)
+        ]);
+
+        var duration =
+            TimeSpan.FromSeconds(125.5);
+
+        var wasUpdated =
+            await repository.UpdateAnalysisAsync(
+                new VideoFileAnalysisUpdate(
+                    RootSourceId: sourceId,
+                    FullPath: videoPath,
+                    State:
+                        VideoFileAnalysisState.Succeeded,
+                    HasVideoStream: true,
+                    Duration: duration,
+                    Width: 1920,
+                    Height: 1080,
+                    Codec: " h264 "));
+
+        Assert.True(wasUpdated);
+
+        var files =
+            await repository.GetByFolderPathAsync(
+                sourceId,
+                folderPath);
+
+        var file = Assert.Single(files);
+
+        Assert.Equal(
+            VideoFileAnalysisState.Succeeded,
+            file.AnalysisState);
+
+        Assert.Equal(
+            true,
+            file.HasVideoStream);
+
+        Assert.Equal(
+            duration,
+            file.Duration);
+
+        Assert.Equal(
+            1920,
+            file.Width);
+
+        Assert.Equal(
+            1080,
+            file.Height);
+
+        Assert.Equal(
+            "h264",
+            file.Codec);
+    }
+
+    [Fact]
+    public async Task UpdateAnalysisAsync_StoresSuccessfulResultWithoutVideoStream()
+    {
+        var repository = await CreateRepositoryAsync();
+
+        var sourceId = Guid.NewGuid();
+        var folderPath =
+            @"C:\Archive\Folder";
+        var videoPath =
+            @"C:\Archive\Folder\AudioOnly.mp4";
+
+        await repository.UpsertBatchAsync(
+        [
+            CreateFile(
+            fullPath: videoPath,
+            name: "AudioOnly.mp4",
+            folderFullPath: folderPath,
+            rootSourceId: sourceId)
+        ]);
+
+        var duration =
+            TimeSpan.FromSeconds(60);
+
+        var wasUpdated =
+            await repository.UpdateAnalysisAsync(
+                new VideoFileAnalysisUpdate(
+                    RootSourceId: sourceId,
+                    FullPath: videoPath,
+                    State:
+                        VideoFileAnalysisState.Succeeded,
+                    HasVideoStream: false,
+                    Duration: duration,
+                    Width: null,
+                    Height: null,
+                    Codec: null));
+
+        Assert.True(wasUpdated);
+
+        var files =
+            await repository.GetByFolderPathAsync(
+                sourceId,
+                folderPath);
+
+        var file = Assert.Single(files);
+
+        Assert.Equal(
+            VideoFileAnalysisState.Succeeded,
+            file.AnalysisState);
+
+        Assert.Equal(
+            false,
+            file.HasVideoStream);
+
+        Assert.Equal(
+            duration,
+            file.Duration);
+
+        Assert.Null(file.Width);
+        Assert.Null(file.Height);
+        Assert.Null(file.Codec);
+    }
+
+    [Fact]
+    public async Task UpdateAnalysisAsync_StoresFailedStateWithoutMetadata()
+    {
+        var repository = await CreateRepositoryAsync();
+
+        var sourceId = Guid.NewGuid();
+        var folderPath =
+            @"C:\Archive\Folder";
+        var videoPath =
+            @"C:\Archive\Folder\Broken.mp4";
+
+        await repository.UpsertBatchAsync(
+        [
+            CreateFile(
+            fullPath: videoPath,
+            name: "Broken.mp4",
+            folderFullPath: folderPath,
+            rootSourceId: sourceId)
+        ]);
+
+        var wasUpdated =
+            await repository.UpdateAnalysisAsync(
+                new VideoFileAnalysisUpdate(
+                    RootSourceId: sourceId,
+                    FullPath: videoPath,
+                    State:
+                        VideoFileAnalysisState.Failed,
+                    HasVideoStream: null,
+                    Duration: null,
+                    Width: null,
+                    Height: null,
+                    Codec: null));
+
+        Assert.True(wasUpdated);
+
+        var files =
+            await repository.GetByFolderPathAsync(
+                sourceId,
+                folderPath);
+
+        var file = Assert.Single(files);
+
+        Assert.Equal(
+            VideoFileAnalysisState.Failed,
+            file.AnalysisState);
+
+        Assert.Null(file.HasVideoStream);
+        Assert.Null(file.Duration);
+        Assert.Null(file.Width);
+        Assert.Null(file.Height);
+        Assert.Null(file.Codec);
+    }
+
+
+    [Fact]
+    public async Task UpsertBatchAsync_WhenFileIsUnchanged_PreservesAnalysis()
+    {
+        var repository = await CreateRepositoryAsync();
+
+        var sourceId = Guid.NewGuid();
+        var folderPath =
+            @"C:\Archive\Folder";
+        var videoPath =
+            @"C:\Archive\Folder\Video.mp4";
+
+        var lastWriteTimeUtc =
+            new DateTimeOffset(
+                2026,
+                8,
+                1,
+                10,
+                0,
+                0,
+                TimeSpan.Zero);
+
+        await repository.UpsertBatchAsync(
+        [
+            CreateFile(
+                fullPath: videoPath,
+                name: "Video.mp4",
+                folderFullPath: folderPath,
+                rootSourceId: sourceId,
+                sizeBytes: 10_000,
+                lastWriteTimeUtc: lastWriteTimeUtc)
+        ]);
+
+        var duration =
+            TimeSpan.FromSeconds(125.5);
+
+        var wasUpdated =
+            await repository.UpdateAnalysisAsync(
+                new VideoFileAnalysisUpdate(
+                    RootSourceId: sourceId,
+                    FullPath: videoPath,
+                    State:
+                        VideoFileAnalysisState.Succeeded,
+                    HasVideoStream: true,
+                    Duration: duration,
+                    Width: 1920,
+                    Height: 1080,
+                    Codec: "h264"));
+
+        Assert.True(wasUpdated);
+
+        await repository.UpsertBatchAsync(
+        [
+            CreateFile(
+                fullPath: videoPath,
+                name: "VIDEO.MP4",
+                normalizedName: "video.mp4",
+                extension: ".MP4",
+                folderFullPath: folderPath,
+                rootSourceId: sourceId,
+                sizeBytes: 10_000,
+                lastWriteTimeUtc: lastWriteTimeUtc,
+                isAvailable: true,
+                lastSeenUtc:
+                    new DateTimeOffset(
+                        2026,
+                        8,
+                        2,
+                        12,
+                        0,
+                        0,
+                        TimeSpan.Zero))
+        ]);
+
+        var files =
+            await repository.GetByFolderPathAsync(
+                sourceId,
+                folderPath);
+
+        var file = Assert.Single(files);
+
+        Assert.Equal(
+            VideoFileAnalysisState.Succeeded,
+            file.AnalysisState);
+
+        Assert.Equal(true, file.HasVideoStream);
+        Assert.Equal(duration, file.Duration);
+        Assert.Equal(1920, file.Width);
+        Assert.Equal(1080, file.Height);
+        Assert.Equal("h264", file.Codec);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task UpsertBatchAsync_WhenFileChanges_ResetsAnalysis(
+        bool changeSize,
+        bool changeLastWriteTime)
+    {
+        var repository = await CreateRepositoryAsync();
+
+        var sourceId = Guid.NewGuid();
+        var folderPath =
+            @"C:\Archive\Folder";
+        var videoPath =
+            @"C:\Archive\Folder\Video.mp4";
+
+        var originalWriteTimeUtc =
+            new DateTimeOffset(
+                2026,
+                8,
+                1,
+                10,
+                0,
+                0,
+                TimeSpan.Zero);
+
+        await repository.UpsertBatchAsync(
+        [
+            CreateFile(
+                fullPath: videoPath,
+                name: "Video.mp4",
+                folderFullPath: folderPath,
+                rootSourceId: sourceId,
+                sizeBytes: 10_000,
+                lastWriteTimeUtc:
+                    originalWriteTimeUtc)
+        ]);
+
+        var wasUpdated =
+            await repository.UpdateAnalysisAsync(
+                new VideoFileAnalysisUpdate(
+                    RootSourceId: sourceId,
+                    FullPath: videoPath,
+                    State:
+                        VideoFileAnalysisState.Succeeded,
+                    HasVideoStream: true,
+                    Duration:
+                        TimeSpan.FromSeconds(90),
+                    Width: 1920,
+                    Height: 1080,
+                    Codec: "h264"));
+
+        Assert.True(wasUpdated);
+
+        await repository.UpsertBatchAsync(
+        [
+            CreateFile(
+                fullPath: videoPath,
+                name: "Video.mp4",
+                folderFullPath: folderPath,
+                rootSourceId: sourceId,
+                sizeBytes:
+                    changeSize
+                        ? 20_000
+                        : 10_000,
+                lastWriteTimeUtc:
+                    changeLastWriteTime
+                        ? originalWriteTimeUtc.AddMinutes(1)
+                        : originalWriteTimeUtc)
+        ]);
+
+        var files =
+            await repository.GetByFolderPathAsync(
+                sourceId,
+                folderPath);
+
+        var file = Assert.Single(files);
+
+        Assert.Equal(
+            VideoFileAnalysisState.NotAnalyzed,
+            file.AnalysisState);
+
+        Assert.Null(file.HasVideoStream);
+        Assert.Null(file.Duration);
+        Assert.Null(file.Width);
+        Assert.Null(file.Height);
+        Assert.Null(file.Codec);
+    }
+
+    [Fact]
+    public async Task UpdateAnalysisAsync_WhenFileDoesNotExist_ReturnsFalse()
+    {
+        var repository = await CreateRepositoryAsync();
+
+        var wasUpdated =
+            await repository.UpdateAnalysisAsync(
+                new VideoFileAnalysisUpdate(
+                    RootSourceId: Guid.NewGuid(),
+                    FullPath:
+                        @"C:\Archive\Missing.mp4",
+                    State:
+                        VideoFileAnalysisState.Failed,
+                    HasVideoStream: null,
+                    Duration: null,
+                    Width: null,
+                    Height: null,
+                    Codec: null));
+
+        Assert.False(wasUpdated);
+    }
+
+
     private async Task<SqliteVideoFileIndexRepository>
         CreateRepositoryAsync()
     {

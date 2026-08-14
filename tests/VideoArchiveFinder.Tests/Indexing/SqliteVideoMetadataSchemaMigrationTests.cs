@@ -5,7 +5,7 @@ using VideoArchiveFinder.Infrastructure.Indexing;
 
 namespace VideoArchiveFinder.Tests.Indexing;
 
-public sealed class SqliteIndexDatabaseMigrationTests
+public sealed class SqliteVideoMetadataSchemaMigrationTests
     : IDisposable
 {
     private readonly string _temporaryDirectory =
@@ -15,10 +15,8 @@ public sealed class SqliteIndexDatabaseMigrationTests
             Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public async Task InitializeAsync_Version1Database_MigratesWithoutLosingFolders()
+    public async Task InitializeAsync_Version3Database_PreservesVideoFiles()
     {
-        Directory.CreateDirectory(_temporaryDirectory);
-
         var databasePath =
             Path.Combine(
                 _temporaryDirectory,
@@ -28,8 +26,11 @@ public sealed class SqliteIndexDatabaseMigrationTests
         Directory.CreateDirectory(
             Path.GetDirectoryName(databasePath)!);
 
-        await CreateVersion1DatabaseAsync(databasePath);
+        var sourceId = Guid.NewGuid();
 
+        await CreateVersion3DatabaseAsync(
+            databasePath,
+            sourceId);
 
         var directoryProvider =
             new TestApplicationDataDirectoryProvider(
@@ -57,33 +58,47 @@ public sealed class SqliteIndexDatabaseMigrationTests
             4,
             await GetSchemaVersionAsync(connection));
 
-
-        Assert.True(
-            await TableExistsAsync(
-                connection,
-                "FolderIndexingStates"));
-
-        Assert.True(
-            await TableExistsAsync(
-                connection,
-                "VideoFiles"));
-
-
-        await using var countCommand =
+        await using var command =
             connection.CreateCommand();
 
-        countCommand.CommandText =
-            "SELECT COUNT(*) FROM Folders;";
+        command.CommandText =
+            """
+            SELECT
+                FullPath,
+                HasVideoStream,
+                DurationTicks,
+                Width,
+                Height,
+                Codec,
+                AnalysisState
+            FROM VideoFiles;
+            """;
 
-        var folderCount =
-            Convert.ToInt32(
-                await countCommand.ExecuteScalarAsync());
+        await using var reader =
+            await command.ExecuteReaderAsync();
 
-        Assert.Equal(1, folderCount);
+        Assert.True(await reader.ReadAsync());
+
+        Assert.Equal(
+            @"C:\Archive\Folder\Video.mp4",
+            reader.GetString(0));
+
+        Assert.True(reader.IsDBNull(1));
+        Assert.True(reader.IsDBNull(2));
+        Assert.True(reader.IsDBNull(3));
+        Assert.True(reader.IsDBNull(4));
+        Assert.True(reader.IsDBNull(5));
+
+        Assert.Equal(
+            0,
+            reader.GetInt32(6));
+
+        Assert.False(await reader.ReadAsync());
     }
 
-    private static async Task CreateVersion1DatabaseAsync(
-        string databasePath)
+    private static async Task CreateVersion3DatabaseAsync(
+        string databasePath,
+        Guid sourceId)
     {
         await using var connection =
             new SqliteConnection(
@@ -96,25 +111,62 @@ public sealed class SqliteIndexDatabaseMigrationTests
 
         command.CommandText =
             """
-            CREATE TABLE Folders
+            CREATE TABLE VideoFiles
             (
-                Id TEXT NOT NULL PRIMARY KEY,
-                FullPath TEXT NOT NULL
+                Id INTEGER NOT NULL
+                    PRIMARY KEY AUTOINCREMENT,
+
+                FullPath TEXT NOT NULL COLLATE NOCASE,
+                Name TEXT NOT NULL,
+                NormalizedName TEXT NOT NULL,
+                Extension TEXT NOT NULL COLLATE NOCASE,
+
+                SizeBytes INTEGER NOT NULL
+                    CHECK (SizeBytes >= 0),
+
+                LastWriteTimeUtc TEXT NOT NULL,
+                FolderFullPath TEXT NOT NULL COLLATE NOCASE,
+                RootSourceId TEXT NOT NULL,
+
+                IsAvailable INTEGER NOT NULL
+                    CHECK (IsAvailable IN (0, 1)),
+
+                LastSeenUtc TEXT NOT NULL
             );
 
-            INSERT INTO Folders
+            INSERT INTO VideoFiles
             (
-                Id,
-                FullPath
+                FullPath,
+                Name,
+                NormalizedName,
+                Extension,
+                SizeBytes,
+                LastWriteTimeUtc,
+                FolderFullPath,
+                RootSourceId,
+                IsAvailable,
+                LastSeenUtc
             )
             VALUES
             (
-                'existing-folder',
-                'C:\Archive'
+                'C:\Archive\Folder\Video.mp4',
+                'Video.mp4',
+                'video.mp4',
+                '.mp4',
+                1000,
+                '2026-08-14T10:00:00.0000000+00:00',
+                'C:\Archive\Folder',
+                $rootSourceId,
+                1,
+                '2026-08-14T12:00:00.0000000+00:00'
             );
 
-            PRAGMA user_version = 1;
+            PRAGMA user_version = 3;
             """;
+
+        command.Parameters.AddWithValue(
+            "$rootSourceId",
+            sourceId.ToString());
 
         await command.ExecuteNonQueryAsync();
     }
@@ -130,29 +182,6 @@ public sealed class SqliteIndexDatabaseMigrationTests
 
         return Convert.ToInt32(
             await command.ExecuteScalarAsync());
-    }
-
-    private static async Task<bool> TableExistsAsync(
-        SqliteConnection connection,
-        string tableName)
-    {
-        await using var command =
-            connection.CreateCommand();
-
-        command.CommandText =
-            """
-            SELECT COUNT(*)
-            FROM sqlite_master
-            WHERE type = 'table'
-              AND name = $tableName;
-            """;
-
-        command.Parameters.AddWithValue(
-            "$tableName",
-            tableName);
-
-        return Convert.ToInt32(
-            await command.ExecuteScalarAsync()) == 1;
     }
 
     public void Dispose()

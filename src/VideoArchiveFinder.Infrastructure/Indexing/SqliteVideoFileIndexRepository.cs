@@ -96,6 +96,72 @@ public sealed class SqliteVideoFileIndexRepository
                     Name = excluded.Name,
                     NormalizedName = excluded.NormalizedName,
                     Extension = excluded.Extension,
+                    HasVideoStream =
+                        CASE
+                            WHEN
+                                VideoFiles.SizeBytes =
+                                    excluded.SizeBytes
+                                AND
+                                VideoFiles.LastWriteTimeUtc =
+                                    excluded.LastWriteTimeUtc
+                            THEN VideoFiles.HasVideoStream
+                            ELSE NULL
+                        END,
+                    DurationTicks =
+                        CASE
+                            WHEN
+                                VideoFiles.SizeBytes =
+                                    excluded.SizeBytes
+                                AND
+                                VideoFiles.LastWriteTimeUtc =
+                                    excluded.LastWriteTimeUtc
+                            THEN VideoFiles.DurationTicks
+                            ELSE NULL
+                        END,
+                    Width =
+                        CASE
+                            WHEN
+                                VideoFiles.SizeBytes =
+                                    excluded.SizeBytes
+                                AND
+                                VideoFiles.LastWriteTimeUtc =
+                                    excluded.LastWriteTimeUtc
+                            THEN VideoFiles.Width
+                            ELSE NULL
+                        END,
+                    Height =
+                        CASE
+                            WHEN
+                                VideoFiles.SizeBytes =
+                                    excluded.SizeBytes
+                                AND
+                                VideoFiles.LastWriteTimeUtc =
+                                    excluded.LastWriteTimeUtc
+                            THEN VideoFiles.Height
+                            ELSE NULL
+                        END,
+                    Codec =
+                        CASE
+                            WHEN
+                                VideoFiles.SizeBytes =
+                                    excluded.SizeBytes
+                                AND
+                                VideoFiles.LastWriteTimeUtc =
+                                    excluded.LastWriteTimeUtc
+                            THEN VideoFiles.Codec
+                            ELSE NULL
+                        END,
+                    AnalysisState =
+                        CASE
+                            WHEN
+                                VideoFiles.SizeBytes =
+                                    excluded.SizeBytes
+                                AND
+                                VideoFiles.LastWriteTimeUtc =
+                                    excluded.LastWriteTimeUtc
+                            THEN VideoFiles.AnalysisState
+                            ELSE 0
+                        END,
                     SizeBytes = excluded.SizeBytes,
                     LastWriteTimeUtc =
                         excluded.LastWriteTimeUtc,
@@ -215,6 +281,121 @@ public sealed class SqliteVideoFileIndexRepository
         }
     }
 
+    public async Task<bool> UpdateAnalysisAsync(
+        VideoFileAnalysisUpdate update,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+
+        ValidateAnalysisUpdate(update);
+
+        await using var connection = CreateConnection();
+
+        await connection
+            .OpenAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        await ConfigureConnectionAsync(
+                connection,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        await using var command =
+            connection.CreateCommand();
+
+        command.CommandText =
+            """
+        UPDATE VideoFiles
+        SET
+            HasVideoStream = $hasVideoStream,
+            DurationTicks = $durationTicks,
+            Width = $width,
+            Height = $height,
+            Codec = $codec,
+            AnalysisState = $analysisState
+        WHERE RootSourceId = $rootSourceId
+          AND FullPath = $fullPath;
+        """;
+
+        var hasVideoStreamParameter =
+            command.Parameters.Add(
+                "$hasVideoStream",
+                SqliteType.Integer);
+
+        hasVideoStreamParameter.Value =
+            update.HasVideoStream.HasValue
+                ? update.HasVideoStream.Value ? 1 : 0
+                : DBNull.Value;
+
+        var durationTicksParameter =
+            command.Parameters.Add(
+                "$durationTicks",
+                SqliteType.Integer);
+
+        durationTicksParameter.Value =
+            update.Duration.HasValue
+                ? update.Duration.Value.Ticks
+                : DBNull.Value;
+
+        var widthParameter =
+            command.Parameters.Add(
+                "$width",
+                SqliteType.Integer);
+
+        widthParameter.Value =
+            update.Width.HasValue
+                ? update.Width.Value
+                : DBNull.Value;
+
+        var heightParameter =
+            command.Parameters.Add(
+                "$height",
+                SqliteType.Integer);
+
+        heightParameter.Value =
+            update.Height.HasValue
+                ? update.Height.Value
+                : DBNull.Value;
+
+        var codecParameter =
+            command.Parameters.Add(
+                "$codec",
+                SqliteType.Text);
+
+        codecParameter.Value =
+            update.Codec is null
+                ? DBNull.Value
+                : update.Codec.Trim();
+
+        command.Parameters.AddWithValue(
+            "$analysisState",
+            (int)update.State);
+
+        command.Parameters.AddWithValue(
+            "$rootSourceId",
+            update.RootSourceId.ToString());
+
+        command.Parameters.AddWithValue(
+            "$fullPath",
+            update.FullPath);
+
+        var affectedRows =
+            await command
+                .ExecuteNonQueryAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+        if (affectedRows == 0)
+        {
+            _logger.LogWarning(
+                "Video analysis result was not stored because " +
+                "the indexed file was not found: {VideoPath}.",
+                update.FullPath);
+        }
+
+        return affectedRows == 1;
+    }
+
+
     public async Task<int> CompleteFolderScanAsync(
         Guid rootSourceId,
         string folderFullPath,
@@ -312,7 +493,13 @@ public sealed class SqliteVideoFileIndexRepository
                 LastWriteTimeUtc,
                 FolderFullPath,
                 RootSourceId,
-                IsAvailable
+                IsAvailable,
+                HasVideoStream,
+                DurationTicks,
+                Width,
+                Height,
+                Codec,
+                AnalysisState
             FROM VideoFiles
             WHERE RootSourceId = $rootSourceId
               AND FolderFullPath = $folderFullPath
@@ -353,11 +540,35 @@ public sealed class SqliteVideoFileIndexRepository
                             reader.GetString(6)),
                     FolderFullPath:
                         reader.GetString(7),
-                    RootSourceId:
-                        Guid.Parse(
-                            reader.GetString(8)),
-                    IsAvailable:
-                        reader.GetInt64(9) == 1));
+RootSourceId:
+    Guid.Parse(reader.GetString(8)),
+IsAvailable:
+    reader.GetInt64(9) == 1,
+HasVideoStream:
+    reader.IsDBNull(10)
+        ? null
+        : reader.GetInt64(10) == 1,
+Duration:
+    reader.IsDBNull(11)
+        ? null
+        : TimeSpan.FromTicks(
+            reader.GetInt64(11)),
+Width:
+    reader.IsDBNull(12)
+        ? null
+        : reader.GetInt32(12),
+Height:
+    reader.IsDBNull(13)
+        ? null
+        : reader.GetInt32(13),
+Codec:
+    reader.IsDBNull(14)
+        ? null
+        : reader.GetString(14),
+AnalysisState:
+    (VideoFileAnalysisState)
+        reader.GetInt32(15)));
+
         }
 
         return files;
@@ -434,6 +645,101 @@ public sealed class SqliteVideoFileIndexRepository
                 nameof(folderFullPath));
         }
     }
+
+    private static void ValidateAnalysisUpdate(
+        VideoFileAnalysisUpdate update)
+    {
+        if (update.RootSourceId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Root source identifier cannot be empty.",
+                nameof(update));
+        }
+
+        if (string.IsNullOrWhiteSpace(update.FullPath))
+        {
+            throw new ArgumentException(
+                "Video file path cannot be empty.",
+                nameof(update));
+        }
+
+        if (!Enum.IsDefined(update.State))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(update),
+                "Unknown video analysis state.");
+        }
+
+        if (update.Duration < TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(update),
+                "Video duration cannot be negative.");
+        }
+
+        if (update.Width is <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(update),
+                "Video width must be positive.");
+        }
+
+        if (update.Height is <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(update),
+                "Video height must be positive.");
+        }
+
+        if (update.Codec is not null &&
+            string.IsNullOrWhiteSpace(update.Codec))
+        {
+            throw new ArgumentException(
+                "Video codec cannot be empty.",
+                nameof(update));
+        }
+
+        if (update.State !=
+                VideoFileAnalysisState.Succeeded &&
+            HasAnyMetadata(update))
+        {
+            throw new ArgumentException(
+                "Metadata can only be stored for a successful analysis.",
+                nameof(update));
+        }
+
+        if (update.State ==
+                VideoFileAnalysisState.Succeeded &&
+            update.HasVideoStream is null)
+        {
+            throw new ArgumentException(
+                "Successful analysis must specify whether a " +
+                "video stream was found.",
+                nameof(update));
+        }
+
+        if (update.HasVideoStream == false &&
+            (update.Width is not null ||
+             update.Height is not null ||
+             update.Codec is not null))
+        {
+            throw new ArgumentException(
+                "Stream metadata cannot be stored when no " +
+                "video stream was found.",
+                nameof(update));
+        }
+    }
+
+    private static bool HasAnyMetadata(
+        VideoFileAnalysisUpdate update)
+    {
+        return update.HasVideoStream is not null ||
+               update.Duration is not null ||
+               update.Width is not null ||
+               update.Height is not null ||
+               update.Codec is not null;
+    }
+
 
     private static void ValidateFile(
         VideoFileIndexUpsertItem file)

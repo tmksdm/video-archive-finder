@@ -10,4 +10,11 @@ public sealed record IndexedVideoFile(
     DateTimeOffset LastWriteTimeUtc,
     string FolderFullPath,
     Guid RootSourceId,
-    bool IsAvailable);
+    bool IsAvailable,
+    bool? HasVideoStream = null,
+    TimeSpan? Duration = null,
+    int? Width = null,
+    int? Height = null,
+    string? Codec = null,
+    VideoFileAnalysisState AnalysisState =
+        VideoFileAnalysisState.NotAnalyzed);

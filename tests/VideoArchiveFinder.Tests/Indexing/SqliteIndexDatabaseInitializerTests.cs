@@ -31,7 +31,7 @@ public sealed class SqliteIndexDatabaseInitializerTests
         await connection.OpenAsync();
 
         Assert.Equal(
-            3,
+            4,
             await GetSchemaVersionAsync(connection));
 
         var tableNames = await ReadStringsAsync(
@@ -67,6 +67,31 @@ public sealed class SqliteIndexDatabaseInitializerTests
         Assert.Contains("RootSourceId", videoFileColumnNames);
         Assert.Contains("IsAvailable", videoFileColumnNames);
         Assert.Contains("LastSeenUtc", videoFileColumnNames);
+
+        Assert.Contains(
+            "HasVideoStream",
+            videoFileColumnNames);
+
+        Assert.Contains(
+            "DurationTicks",
+            videoFileColumnNames);
+
+        Assert.Contains(
+            "Width",
+            videoFileColumnNames);
+
+        Assert.Contains(
+            "Height",
+            videoFileColumnNames);
+
+        Assert.Contains(
+            "Codec",
+            videoFileColumnNames);
+
+        Assert.Contains(
+            "AnalysisState",
+            videoFileColumnNames);
+
 
 
         var columnNames = await ReadStringsAsync(
@@ -192,7 +217,7 @@ public sealed class SqliteIndexDatabaseInitializerTests
 
         Assert.Equal(1, folderCount);
         Assert.Equal(
-            3,
+            4,
             await GetSchemaVersionAsync(verificationConnection));
     }
 

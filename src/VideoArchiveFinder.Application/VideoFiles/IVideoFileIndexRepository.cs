@@ -6,6 +6,10 @@ public interface IVideoFileIndexRepository
         IReadOnlyCollection<VideoFileIndexUpsertItem> files,
         CancellationToken cancellationToken = default);
 
+    Task<bool> UpdateAnalysisAsync(
+        VideoFileAnalysisUpdate update,
+        CancellationToken cancellationToken = default);
+
     Task<int> CompleteFolderScanAsync(
         Guid rootSourceId,
         string folderFullPath,
