@@ -37,6 +37,9 @@ public static class DependencyInjection
             IFfprobeRunner,
             FfprobeRunner>();
 
+        services.AddSingleton<
+            IFfprobeJsonParser,
+            FfprobeJsonParser>();
 
         services.AddSingleton<
             IApplicationDataDirectoryProvider,
