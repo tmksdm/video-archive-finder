@@ -45,6 +45,15 @@ public static class DependencyInjection
             IVideoFileAnalysisService,
             VideoFileAnalysisService>();
 
+        services.AddSingleton<
+            VideoFileAnalysisQueue>();
+
+        services.AddSingleton<
+            IVideoFileAnalysisQueue>(
+                serviceProvider =>
+                    serviceProvider.GetRequiredService<
+                        VideoFileAnalysisQueue>());
+
 
         services.AddSingleton<
             IApplicationDataDirectoryProvider,
