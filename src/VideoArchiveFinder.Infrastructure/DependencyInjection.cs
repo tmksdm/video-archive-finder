@@ -12,9 +12,8 @@ using VideoArchiveFinder.Application.Settings;
 using VideoArchiveFinder.Infrastructure.Settings;
 using VideoArchiveFinder.Application.ExternalTools;
 using VideoArchiveFinder.Infrastructure.ExternalTools;
-
-
-
+using VideoArchiveFinder.Application.Thumbnails;
+using VideoArchiveFinder.Infrastructure.Thumbnails;
 
 
 namespace VideoArchiveFinder.Infrastructure;
@@ -24,6 +23,14 @@ public static class DependencyInjection
     public static IServiceCollection AddVideoArchiveFinderInfrastructure(
         this IServiceCollection services)
     {
+
+        services.AddSingleton<
+            IThumbnailCacheKeyGenerator,
+            ThumbnailCacheKeyGenerator>();
+
+        services.AddSingleton<
+            IStaticThumbnailGenerator,
+            StaticThumbnailGenerator>();
 
         services.AddSingleton<
             IFfmpegToolsLocator,
