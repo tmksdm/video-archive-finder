@@ -23,4 +23,30 @@
 	<Product>Video Archive Finder</Product>
   </PropertyGroup>
 
+	<ItemGroup>
+		<Content Include="..\..\external\ffmpeg\bin\ffmpeg.exe"
+				 Condition="Exists('..\..\external\ffmpeg\bin\ffmpeg.exe')">
+			<Link>app\tools\ffmpeg.exe</Link>
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+			<ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+		</Content>
+
+		<Content Include="..\..\external\ffmpeg\bin\ffprobe.exe"
+				 Condition="Exists('..\..\external\ffmpeg\bin\ffprobe.exe')">
+			<Link>app\tools\ffprobe.exe</Link>
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+			<ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+		</Content>
+
+		<Content Include="..\..\external\ffmpeg\licenses\**\*"
+				 Condition="Exists('..\..\external\ffmpeg\licenses')">
+			<Link>app\licenses\ffmpeg\%(RecursiveDir)%(Filename)%(Extension)</Link>
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+			<ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+		</Content>
+	</ItemGroup>
+
 </Project>

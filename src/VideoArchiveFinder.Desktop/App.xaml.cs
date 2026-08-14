@@ -6,6 +6,8 @@ using VideoArchiveFinder.Desktop.ViewModels;
 using VideoArchiveFinder.Infrastructure;
 using VideoArchiveFinder.Desktop.Services;
 using VideoArchiveFinder.Application.Indexing;
+using VideoArchiveFinder.Application.ExternalTools;
+
 
 namespace VideoArchiveFinder.Desktop;
 
@@ -58,6 +60,29 @@ public partial class App : System.Windows.Application
             .Build();
 
         await _host.StartAsync();
+
+        var ffmpegToolsLocator =
+            _host.Services.GetRequiredService<
+                IFfmpegToolsLocator>();
+
+        var ffmpegToolsStatus =
+            ffmpegToolsLocator.Locate();
+
+        if (!ffmpegToolsStatus.IsReady)
+        {
+            Log.Warning(
+                "FFmpeg tools are unavailable. {DiagnosticMessage}",
+                ffmpegToolsStatus.DiagnosticMessage);
+
+            System.Windows.MessageBox.Show(
+                "Функции анализа видео и создания превью " +
+                "временно недоступны.\n\n" +
+                ffmpegToolsStatus.DiagnosticMessage,
+                "Не найдены FFmpeg и FFprobe",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Warning);
+        }
+
 
         var appThemeService =
             _host.Services.GetRequiredService<IAppThemeService>();
