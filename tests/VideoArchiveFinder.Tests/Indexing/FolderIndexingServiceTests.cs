@@ -229,14 +229,28 @@ public sealed class FolderIndexingServiceTests
         var videoRepository =
             new RecordingVideoFileIndexRepository();
 
+        var analysisQueue =
+            new RecordingVideoFileAnalysisQueue(
+                (_, _, _) =>
+                {
+                    Assert.Single(
+                        videoRepository.Batches);
+
+                    return ValueTask.CompletedTask;
+                });
+
         var service =
-            CreateService(
+
+                    CreateService(
                 enumerator,
                 folderRepository,
                 videoFileDiscoveryService:
                     discoveryService,
-                videoFileIndexRepository:
-                    videoRepository);
+videoFileIndexRepository:
+    videoRepository,
+videoFileAnalysisQueue:
+    analysisQueue);
+
 
         var result =
             await service.ScanAsync(source);
@@ -308,6 +322,18 @@ public sealed class FolderIndexingServiceTests
         var completion =
             Assert.Single(
                 videoRepository.Completions);
+
+        var analysisRequest =
+            Assert.Single(
+                analysisQueue.Requests);
+
+        Assert.Equal(
+            source.Id,
+            analysisRequest.RootSourceId);
+
+        Assert.Equal(
+            folderPath + @"\ЁЖ_Дорога.MP4",
+            analysisRequest.FullPath);
 
         Assert.Equal(
             source.Id,
@@ -426,6 +452,97 @@ public sealed class FolderIndexingServiceTests
     }
 
 
+    [Fact]
+    public async Task ScanAsync_WhenAnalysisQueueFails_ContinuesIndexing()
+    {
+        var scenario =
+            CreateSingleVideoScenario();
+
+        var folderRepository =
+            new RecordingFolderIndexRepository();
+
+        var analysisQueue =
+            new RecordingVideoFileAnalysisQueue(
+                (_, _, _) =>
+                    ValueTask.FromException(
+                        new InvalidOperationException(
+                            "Test queue failure.")));
+
+        var service =
+            CreateService(
+                scenario.Enumerator,
+                folderRepository,
+                videoFileDiscoveryService:
+                    scenario.DiscoveryService,
+                videoFileAnalysisQueue:
+                    analysisQueue);
+
+        var result =
+            await service.ScanAsync(
+                scenario.Source);
+
+        Assert.Equal(1, result.ErrorCount);
+        Assert.Single(folderRepository.Batches);
+        Assert.Single(analysisQueue.Requests);
+    }
+
+    [Fact]
+    public async Task ScanAsync_WhenAnalysisQueueIsCancelled_CancelsScan()
+    {
+        var scenario =
+            CreateSingleVideoScenario();
+
+        var folderRepository =
+            new RecordingFolderIndexRepository();
+
+        var enqueueStarted =
+            new TaskCompletionSource(
+                TaskCreationOptions
+                    .RunContinuationsAsynchronously);
+
+        var analysisQueue =
+            new RecordingVideoFileAnalysisQueue(
+                async (_, _, cancellationToken) =>
+                {
+                    enqueueStarted.TrySetResult();
+
+                    await Task.Delay(
+                        Timeout.InfiniteTimeSpan,
+                        cancellationToken);
+                });
+
+        var service =
+            CreateService(
+                scenario.Enumerator,
+                folderRepository,
+                videoFileDiscoveryService:
+                    scenario.DiscoveryService,
+                videoFileAnalysisQueue:
+                    analysisQueue);
+
+        using var cancellationSource =
+            new CancellationTokenSource();
+
+        var scanningTask =
+            service.ScanAsync(
+                scenario.Source,
+                cancellationToken:
+                    cancellationSource.Token);
+
+        await enqueueStarted.Task.WaitAsync(
+            TimeSpan.FromSeconds(5));
+
+        cancellationSource.Cancel();
+
+        await Assert.ThrowsAnyAsync<
+            OperationCanceledException>(
+                () => scanningTask);
+
+        Assert.Single(analysisQueue.Requests);
+        Assert.Empty(folderRepository.Batches);
+    }
+
+
 
     [Fact]
     public async Task ScanAsync_MoreThanBatchSize_WritesSeveralBatches()
@@ -508,6 +625,76 @@ public sealed class FolderIndexingServiceTests
         Assert.Empty(stateRepository.SavedStates);
     }
 
+    private static SingleVideoScenario
+        CreateSingleVideoScenario()
+    {
+        var source =
+            ArchiveSource.Create(
+                @"C:\Archive");
+
+        var folderPath =
+            @"C:\Archive\Видео";
+
+        var enumerator =
+            new TestFolderTreeEnumerator(
+            [
+                new DiscoveredFolder(
+                FullPath:
+                    folderPath,
+                Name:
+                    "Видео",
+                ParentFullPath:
+                    @"C:\Archive",
+                DirectSubfolderCount:
+                    0,
+                IsAvailable:
+                    true,
+                IsReparsePoint:
+                    false)
+            ]);
+
+        var discoveryService =
+            new TestVideoFileDiscoveryService(
+                new VideoFileDiscoveryResult(
+                    Files:
+                    [
+                        new DiscoveredVideoFile(
+                        FullPath:
+                            folderPath +
+                            @"\Видео.mp4",
+                        Name:
+                            "Видео.mp4",
+                        Extension:
+                            ".mp4",
+                        SizeBytes:
+                            1_000,
+                        LastWriteTimeUtc:
+                            new DateTimeOffset(
+                                2026,
+                                8,
+                                1,
+                                12,
+                                0,
+                                0,
+                                TimeSpan.Zero))
+                    ],
+                    ErrorCount:
+                        0,
+                    CanRemoveStaleEntries:
+                        true));
+
+        return new SingleVideoScenario(
+            source,
+            enumerator,
+            discoveryService);
+    }
+
+    private sealed record SingleVideoScenario(
+        ArchiveSource Source,
+        TestFolderTreeEnumerator Enumerator,
+        TestVideoFileDiscoveryService DiscoveryService);
+
+
     private static FolderIndexingService CreateService(
         IFolderTreeEnumerator enumerator,
         IFolderIndexRepository repository,
@@ -516,16 +703,21 @@ public sealed class FolderIndexingServiceTests
         IVideoFileDiscoveryService?
             videoFileDiscoveryService = null,
         IVideoFileIndexRepository?
-            videoFileIndexRepository = null)
+            videoFileIndexRepository = null,
+        IVideoFileAnalysisQueue?
+            videoFileAnalysisQueue = null)
+
     {
         return new FolderIndexingService(
             enumerator,
             repository,
             videoFileDiscoveryService ??
                 new EmptyVideoFileDiscoveryService(),
-            videoFileIndexRepository ??
-                new RecordingVideoFileIndexRepository(),
-            stateRepository ??
+videoFileIndexRepository ??
+    new RecordingVideoFileIndexRepository(),
+videoFileAnalysisQueue ??
+    new RecordingVideoFileAnalysisQueue(),
+stateRepository ??
                 new RecordingFolderIndexingStateRepository(),
             new TextNormalizationService(),
             new RussianSearchStemService(),
@@ -816,4 +1008,57 @@ public sealed class FolderIndexingServiceTests
             Reports.Add(value);
         }
     }
+
+    private sealed class RecordingVideoFileAnalysisQueue
+        : IVideoFileAnalysisQueue
+    {
+        private readonly Func<
+            Guid,
+            string,
+            CancellationToken,
+            ValueTask> _enqueue;
+
+        public RecordingVideoFileAnalysisQueue(
+            Func<
+                Guid,
+                string,
+                CancellationToken,
+                ValueTask>? enqueue = null)
+        {
+            _enqueue =
+                enqueue ??
+                ((_, _, _) =>
+                    ValueTask.CompletedTask);
+        }
+
+        public List<VideoAnalysisQueueRequest>
+            Requests
+        { get; } = [];
+
+        public ValueTask EnqueueAsync(
+            Guid rootSourceId,
+            string fullPath,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken
+                .ThrowIfCancellationRequested();
+
+            Requests.Add(
+                new VideoAnalysisQueueRequest(
+                    rootSourceId,
+                    fullPath));
+
+            return _enqueue(
+                rootSourceId,
+                fullPath,
+                cancellationToken);
+        }
+    }
+
+
+    private sealed record VideoAnalysisQueueRequest(
+        Guid RootSourceId,
+        string FullPath);
+
+
 }

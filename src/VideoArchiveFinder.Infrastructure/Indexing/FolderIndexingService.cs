@@ -23,6 +23,9 @@ public sealed class FolderIndexingService
     private readonly IVideoFileIndexRepository
         _videoFileIndexRepository;
 
+    private readonly IVideoFileAnalysisQueue
+        _videoFileAnalysisQueue;
+
     private readonly IFolderIndexingStateRepository
         _folderIndexingStateRepository;
 
@@ -38,8 +41,9 @@ public sealed class FolderIndexingService
     public FolderIndexingService(
         IFolderTreeEnumerator folderTreeEnumerator,
         IFolderIndexRepository folderIndexRepository,
-        IVideoFileDiscoveryService videoFileDiscoveryService,
-        IVideoFileIndexRepository videoFileIndexRepository,
+IVideoFileDiscoveryService videoFileDiscoveryService,
+IVideoFileIndexRepository videoFileIndexRepository,
+IVideoFileAnalysisQueue videoFileAnalysisQueue,
 IFolderIndexingStateRepository
     folderIndexingStateRepository,
 ITextNormalizationService
@@ -60,6 +64,9 @@ ILogger<FolderIndexingService> logger)
 
         _videoFileIndexRepository =
             videoFileIndexRepository;
+
+        _videoFileAnalysisQueue =
+            videoFileAnalysisQueue;
 
         _folderIndexingStateRepository =
             folderIndexingStateRepository;
@@ -372,7 +379,38 @@ ILogger<FolderIndexingService> logger)
                 cancellationToken)
             .ConfigureAwait(false);
 
+        var analysisQueueErrorCount = 0;
+
+        foreach (var file in files)
+        {
+            try
+            {
+                await _videoFileAnalysisQueue
+                    .EnqueueAsync(
+                        rootSourceId,
+                        file.FullPath,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+                when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                analysisQueueErrorCount++;
+
+                _logger.LogWarning(
+                    exception,
+                    "Cannot enqueue video file {VideoPath} " +
+                    "for background analysis. Indexing will continue.",
+                    file.FullPath);
+            }
+        }
+
         if (discoveryResult.CanRemoveStaleEntries)
+
         {
             await _videoFileIndexRepository
                 .CompleteFolderScanAsync(
@@ -386,7 +424,9 @@ ILogger<FolderIndexingService> logger)
         return (
             FileCount: files.Length,
             ErrorCount:
-                discoveryResult.ErrorCount);
+                discoveryResult.ErrorCount +
+                analysisQueueErrorCount);
+
     }
 
     private VideoFileIndexUpsertItem
