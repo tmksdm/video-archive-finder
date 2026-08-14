@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using System.Threading.Channels;
+using VideoArchiveFinder.Application.Thumbnails;
 using VideoArchiveFinder.Application.VideoFiles;
 
 namespace VideoArchiveFinder.Infrastructure.ExternalTools;
@@ -9,11 +10,14 @@ public sealed class VideoFileAnalysisQueue
       IAsyncDisposable,
       IDisposable
 {
-    private readonly Channel<AnalysisWorkItem>
+    private readonly Channel<VideoFileAnalysisRequest>
         _channel;
 
     private readonly IVideoFileAnalysisService
         _analysisService;
+
+    private readonly IStaticThumbnailGenerationQueue
+        _thumbnailGenerationQueue;
 
     private readonly ILogger<VideoFileAnalysisQueue>
         _logger;
@@ -27,12 +31,17 @@ public sealed class VideoFileAnalysisQueue
 
     public VideoFileAnalysisQueue(
         IVideoFileAnalysisService analysisService,
+        IStaticThumbnailGenerationQueue
+            thumbnailGenerationQueue,
         ILogger<VideoFileAnalysisQueue> logger,
         int maximumParallelism = 2,
         int capacity = 128)
     {
         ArgumentNullException.ThrowIfNull(
             analysisService);
+
+        ArgumentNullException.ThrowIfNull(
+            thumbnailGenerationQueue);
 
         ArgumentNullException.ThrowIfNull(logger);
 
@@ -51,10 +60,13 @@ public sealed class VideoFileAnalysisQueue
         }
 
         _analysisService = analysisService;
+        _thumbnailGenerationQueue =
+            thumbnailGenerationQueue;
         _logger = logger;
 
         _channel =
-            Channel.CreateBounded<AnalysisWorkItem>(
+            Channel.CreateBounded<
+                VideoFileAnalysisRequest>(
                 new BoundedChannelOptions(capacity)
                 {
                     FullMode =
@@ -79,33 +91,41 @@ public sealed class VideoFileAnalysisQueue
     }
 
     public async ValueTask EnqueueAsync(
-        Guid rootSourceId,
-        string fullPath,
+        VideoFileAnalysisRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (rootSourceId == Guid.Empty)
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (request.RootSourceId == Guid.Empty)
         {
             throw new ArgumentException(
                 "Root source identifier cannot be empty.",
-                nameof(rootSourceId));
+                nameof(request));
         }
 
-        ArgumentException.ThrowIfNullOrWhiteSpace(
-            fullPath);
+        if (string.IsNullOrWhiteSpace(
+            request.FullPath))
+        {
+            throw new ArgumentException(
+                "Video path cannot be empty.",
+                nameof(request));
+        }
+
+        if (request.SizeBytes < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(request),
+                "Video file size cannot be negative.");
+        }
 
         ObjectDisposedException.ThrowIf(
             Volatile.Read(ref _isDisposed) != 0,
             this);
 
-        var workItem =
-            new AnalysisWorkItem(
-                rootSourceId,
-                fullPath);
-
         try
         {
             await _channel.Writer.WriteAsync(
-                workItem,
+                request,
                 cancellationToken);
         }
         catch (ChannelClosedException)
@@ -124,7 +144,6 @@ public sealed class VideoFileAnalysisQueue
             .GetAwaiter()
             .GetResult();
     }
-
 
     public async ValueTask DisposeAsync()
     {
@@ -159,17 +178,37 @@ public sealed class VideoFileAnalysisQueue
     {
         try
         {
-            await foreach (var workItem in
+            await foreach (var request in
                 _channel.Reader.ReadAllAsync(
                     stoppingToken))
             {
                 try
                 {
-                    await _analysisService
-                        .AnalyzeAsync(
-                            workItem.RootSourceId,
-                            workItem.FullPath,
-                            stoppingToken);
+                    var result =
+                        await _analysisService
+                            .AnalyzeAsync(
+                                request.RootSourceId,
+                                request.FullPath,
+                                stoppingToken);
+
+                    if (result.WasStored &&
+                        result.State ==
+                            VideoFileAnalysisState
+                                .Succeeded &&
+                        result.HasVideoStream is true)
+                    {
+                        await _thumbnailGenerationQueue
+                            .EnqueueAsync(
+                                new StaticThumbnailRequest(
+                                    VideoPath:
+                                        request.FullPath,
+                                    SizeBytes:
+                                        request.SizeBytes,
+                                    LastWriteTimeUtc:
+                                        request
+                                            .LastWriteTimeUtc),
+                                stoppingToken);
+                    }
                 }
                 catch (OperationCanceledException)
                     when (stoppingToken
@@ -181,10 +220,10 @@ public sealed class VideoFileAnalysisQueue
                 {
                     _logger.LogError(
                         exception,
-                        "Background video analysis failed " +
+                        "Background video processing failed " +
                         "for {VideoPath}. Queue processing " +
                         "will continue.",
-                        workItem.FullPath);
+                        request.FullPath);
                 }
             }
         }
@@ -195,8 +234,4 @@ public sealed class VideoFileAnalysisQueue
             // Остановка очереди является штатной.
         }
     }
-
-    private sealed record AnalysisWorkItem(
-        Guid RootSourceId,
-        string FullPath);
 }

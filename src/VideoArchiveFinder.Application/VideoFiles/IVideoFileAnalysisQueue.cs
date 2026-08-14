@@ -3,7 +3,6 @@
 public interface IVideoFileAnalysisQueue
 {
     ValueTask EnqueueAsync(
-        Guid rootSourceId,
-        string fullPath,
+        VideoFileAnalysisRequest request,
         CancellationToken cancellationToken = default);
 }

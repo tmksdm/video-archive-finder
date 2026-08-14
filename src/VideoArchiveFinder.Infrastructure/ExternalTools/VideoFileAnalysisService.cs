@@ -112,6 +112,7 @@ public sealed class VideoFileAnalysisService
         return new VideoFileAnalysisResult(
             WasStored: wasStored,
             State: VideoFileAnalysisState.Succeeded,
+            HasVideoStream: metadata.HasVideoStream,
             DiagnosticMessage:
                 parseResult.DiagnosticMessage);
     }
@@ -151,6 +152,7 @@ public sealed class VideoFileAnalysisService
         return new VideoFileAnalysisResult(
             WasStored: wasStored,
             State: VideoFileAnalysisState.Failed,
+            HasVideoStream: null,
             DiagnosticMessage: diagnosticMessage);
     }
 }

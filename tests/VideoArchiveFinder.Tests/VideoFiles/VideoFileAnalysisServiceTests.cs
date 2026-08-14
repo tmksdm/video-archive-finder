@@ -105,6 +105,7 @@ public sealed class VideoFileAnalysisServiceTests
         Assert.Equal(
             VideoFileAnalysisState.Succeeded,
             result.State);
+        Assert.False(result.HasVideoStream);
 
         var update =
             Assert.IsType<VideoFileAnalysisUpdate>(
@@ -151,6 +152,7 @@ public sealed class VideoFileAnalysisServiceTests
         Assert.Equal(
             VideoFileAnalysisState.Failed,
             result.State);
+        Assert.Null(result.HasVideoStream);
 
         Assert.Equal(
             "FFprobe failed.",
@@ -184,6 +186,7 @@ public sealed class VideoFileAnalysisServiceTests
         Assert.Equal(
             VideoFileAnalysisState.Failed,
             result.State);
+        Assert.Null(result.HasVideoStream);
 
         Assert.Contains(
             "Не удалось разобрать JSON FFprobe",

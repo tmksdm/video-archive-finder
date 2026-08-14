@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging.Abstractions;
+using VideoArchiveFinder.Application.Thumbnails;
 using VideoArchiveFinder.Application.VideoFiles;
 using VideoArchiveFinder.Infrastructure.ExternalTools;
 
@@ -68,6 +69,7 @@ public sealed class VideoFileAnalysisQueueTests
         await using var queue =
             new VideoFileAnalysisQueue(
                 analysisService,
+                new TestStaticThumbnailGenerationQueue(),
                 NullLogger<VideoFileAnalysisQueue>.Instance,
                 maximumParallelism: 2,
                 capacity: 8);
@@ -75,8 +77,8 @@ public sealed class VideoFileAnalysisQueueTests
         for (var index = 0; index < 4; index++)
         {
             await queue.EnqueueAsync(
-                RootSourceId,
-                $@"C:\Archive\Video{index}.mp4");
+                CreateRequest(
+                $@"C:\Archive\Video{index}.mp4"));
         }
 
         await twoWorkersStarted.Task.WaitAsync(
@@ -128,13 +130,14 @@ public sealed class VideoFileAnalysisQueueTests
         var queue =
             new VideoFileAnalysisQueue(
                 analysisService,
+                new TestStaticThumbnailGenerationQueue(),
                 NullLogger<VideoFileAnalysisQueue>.Instance,
                 maximumParallelism: 1,
                 capacity: 4);
 
         await queue.EnqueueAsync(
-            RootSourceId,
-            @"C:\Archive\Video.mp4");
+            CreateRequest(
+            @"C:\Archive\Video.mp4"));
 
         await analysisStarted.Task.WaitAsync(
             TimeSpan.FromSeconds(5));
@@ -176,17 +179,18 @@ public sealed class VideoFileAnalysisQueueTests
         await using var queue =
             new VideoFileAnalysisQueue(
                 analysisService,
+                new TestStaticThumbnailGenerationQueue(),
                 NullLogger<VideoFileAnalysisQueue>.Instance,
                 maximumParallelism: 1,
                 capacity: 4);
 
         await queue.EnqueueAsync(
-            RootSourceId,
-            @"C:\Archive\Broken.mp4");
+            CreateRequest(
+            @"C:\Archive\Broken.mp4"));
 
         await queue.EnqueueAsync(
-            RootSourceId,
-            @"C:\Archive\Working.mp4");
+            CreateRequest(
+            @"C:\Archive\Working.mp4"));
 
         await secondFileCompleted.Task.WaitAsync(
             TimeSpan.FromSeconds(5));
@@ -194,6 +198,158 @@ public sealed class VideoFileAnalysisQueueTests
         Assert.Equal(
             2,
             Volatile.Read(ref callCount));
+    }
+
+    [Fact]
+    public async Task SuccessfulVideoAnalysis_EnqueuesThumbnail()
+    {
+        const string videoPath =
+            @"C:\Archive\ConfirmedVideo.mp4";
+
+        var thumbnailQueue =
+            new TestStaticThumbnailGenerationQueue();
+
+        var analysisService =
+            new TestVideoFileAnalysisService(
+                (_, _, _) =>
+                    Task.FromResult(
+                        new VideoFileAnalysisResult(
+                            WasStored: true,
+                            State:
+                                VideoFileAnalysisState
+                                    .Succeeded,
+                            HasVideoStream: true,
+                            DiagnosticMessage:
+                                string.Empty)));
+
+        await using var queue =
+            new VideoFileAnalysisQueue(
+                analysisService,
+                thumbnailQueue,
+                NullLogger<VideoFileAnalysisQueue>.Instance,
+                maximumParallelism: 1,
+                capacity: 4);
+
+        var request = CreateRequest(videoPath);
+
+        await queue.EnqueueAsync(request);
+
+        await thumbnailQueue.RequestEnqueued.Task
+            .WaitAsync(TimeSpan.FromSeconds(5));
+
+        var thumbnailRequest =
+            Assert.Single(thumbnailQueue.Requests);
+
+        Assert.Equal(
+            request.FullPath,
+            thumbnailRequest.VideoPath);
+
+        Assert.Equal(
+            request.SizeBytes,
+            thumbnailRequest.SizeBytes);
+
+        Assert.Equal(
+            request.LastWriteTimeUtc,
+            thumbnailRequest.LastWriteTimeUtc);
+    }
+
+    [Theory]
+    [InlineData(
+        true,
+        false,
+        VideoFileAnalysisState.Succeeded)]
+    [InlineData(
+        false,
+        true,
+        VideoFileAnalysisState.Succeeded)]
+    [InlineData(
+        true,
+        true,
+        VideoFileAnalysisState.Failed)]
+    public async Task AnalysisWithoutConfirmedStoredVideo_DoesNotEnqueueThumbnail(
+
+        bool wasStored,
+        bool hasVideoStream,
+        VideoFileAnalysisState state)
+    {
+        const string candidatePath =
+            @"C:\Archive\Candidate.mp4";
+
+        const string barrierPath =
+            @"C:\Archive\Barrier.mp4";
+
+        var barrierStarted =
+            CreateCompletionSource();
+
+        var thumbnailQueue =
+            new TestStaticThumbnailGenerationQueue();
+
+        var analysisService =
+            new TestVideoFileAnalysisService(
+                (_, fullPath, _) =>
+                {
+                    if (fullPath == barrierPath)
+                    {
+                        barrierStarted.TrySetResult();
+
+                        return Task.FromResult(
+                            new VideoFileAnalysisResult(
+                                WasStored: true,
+                                State:
+                                    VideoFileAnalysisState
+                                        .Succeeded,
+                                HasVideoStream: false,
+                                DiagnosticMessage:
+                                    string.Empty));
+                    }
+
+                    return Task.FromResult(
+                        new VideoFileAnalysisResult(
+                            WasStored: wasStored,
+                            State: state,
+                            HasVideoStream:
+                                hasVideoStream,
+                            DiagnosticMessage:
+                                string.Empty));
+                });
+
+        await using var queue =
+            new VideoFileAnalysisQueue(
+                analysisService,
+                thumbnailQueue,
+                NullLogger<VideoFileAnalysisQueue>.Instance,
+                maximumParallelism: 1,
+                capacity: 4);
+
+        await queue.EnqueueAsync(
+            CreateRequest(candidatePath));
+
+        await queue.EnqueueAsync(
+            CreateRequest(barrierPath));
+
+        await barrierStarted.Task.WaitAsync(
+            TimeSpan.FromSeconds(5));
+
+        Assert.Empty(thumbnailQueue.Requests);
+    }
+
+
+    private static VideoFileAnalysisRequest
+        CreateRequest(string fullPath)
+    {
+        return new VideoFileAnalysisRequest(
+            RootSourceId: RootSourceId,
+            FullPath: fullPath,
+            SizeBytes: 1024,
+            LastWriteTimeUtc:
+                new DateTimeOffset(
+                    2026,
+                    8,
+                    14,
+                    10,
+                    0,
+                    0,
+                    TimeSpan.Zero));
     }
 
     private static TaskCompletionSource
@@ -211,6 +367,7 @@ public sealed class VideoFileAnalysisQueueTests
             WasStored: true,
             State:
                 VideoFileAnalysisState.Succeeded,
+            HasVideoStream: true,
             DiagnosticMessage: string.Empty);
     }
 
@@ -269,4 +426,36 @@ public sealed class VideoFileAnalysisQueueTests
                 cancellationToken);
         }
     }
+
+    private sealed class
+        TestStaticThumbnailGenerationQueue
+        : IStaticThumbnailGenerationQueue
+    {
+        public TaskCompletionSource RequestEnqueued
+        { get; } =
+            new(
+                TaskCreationOptions
+                    .RunContinuationsAsynchronously);
+
+        public List<StaticThumbnailRequest>
+            Requests
+        { get; } = [];
+
+        public ValueTask EnqueueAsync(
+            StaticThumbnailRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(request);
+
+            cancellationToken
+                .ThrowIfCancellationRequested();
+
+            Requests.Add(request);
+            RequestEnqueued.TrySetResult();
+
+            return ValueTask.CompletedTask;
+        }
+    }
+
+
 }

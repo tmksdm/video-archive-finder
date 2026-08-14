@@ -3,4 +3,5 @@
 public sealed record VideoFileAnalysisResult(
     bool WasStored,
     VideoFileAnalysisState State,
+    bool? HasVideoStream,
     string DiagnosticMessage);

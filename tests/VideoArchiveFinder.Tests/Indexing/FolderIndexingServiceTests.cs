@@ -1037,23 +1037,25 @@ public sealed class FolderIndexingServiceTests
         { get; } = [];
 
         public ValueTask EnqueueAsync(
-            Guid rootSourceId,
-            string fullPath,
+            VideoFileAnalysisRequest request,
             CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(request);
+
             cancellationToken
                 .ThrowIfCancellationRequested();
 
             Requests.Add(
                 new VideoAnalysisQueueRequest(
-                    rootSourceId,
-                    fullPath));
+                    request.RootSourceId,
+                    request.FullPath));
 
             return _enqueue(
-                rootSourceId,
-                fullPath,
+                request.RootSourceId,
+                request.FullPath,
                 cancellationToken);
         }
+
     }
 
 

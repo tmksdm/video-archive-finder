@@ -388,8 +388,12 @@ public sealed class FolderIndexingService
             {
                 await _videoFileAnalysisQueue
                     .EnqueueAsync(
-                        rootSourceId,
-                        file.FullPath,
+                        new VideoFileAnalysisRequest(
+                            RootSourceId: rootSourceId,
+                            FullPath: file.FullPath,
+                            SizeBytes: file.SizeBytes,
+                            LastWriteTimeUtc:
+                                file.LastWriteTimeUtc),
                         cancellationToken)
                     .ConfigureAwait(false);
             }
