@@ -41,16 +41,17 @@ public sealed class FolderIndexingService
     public FolderIndexingService(
         IFolderTreeEnumerator folderTreeEnumerator,
         IFolderIndexRepository folderIndexRepository,
-IVideoFileDiscoveryService videoFileDiscoveryService,
-IVideoFileIndexRepository videoFileIndexRepository,
-IVideoFileAnalysisQueue videoFileAnalysisQueue,
-IFolderIndexingStateRepository
-    folderIndexingStateRepository,
-ITextNormalizationService
-    textNormalizationService,
-ISearchStemService
-    searchStemService,
-ILogger<FolderIndexingService> logger)
+        IVideoFileDiscoveryService videoFileDiscoveryService,
+        IVideoFileIndexRepository videoFileIndexRepository,
+        IVideoFileAnalysisQueue videoFileAnalysisQueue,
+        IFolderIndexingStateRepository
+            folderIndexingStateRepository,
+        ITextNormalizationService
+            textNormalizationService,
+        ISearchStemService
+            searchStemService,
+        ILogger<FolderIndexingService> logger)
+
 
     {
         _folderTreeEnumerator =
@@ -410,7 +411,6 @@ ILogger<FolderIndexingService> logger)
         }
 
         if (discoveryResult.CanRemoveStaleEntries)
-
         {
             await _videoFileIndexRepository
                 .CompleteFolderScanAsync(
@@ -426,7 +426,6 @@ ILogger<FolderIndexingService> logger)
             ErrorCount:
                 discoveryResult.ErrorCount +
                 analysisQueueErrorCount);
-
     }
 
     private VideoFileIndexUpsertItem

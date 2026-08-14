@@ -240,16 +240,16 @@ public sealed class FolderIndexingServiceTests
                 });
 
         var service =
-
-                    CreateService(
+            CreateService(
                 enumerator,
                 folderRepository,
                 videoFileDiscoveryService:
                     discoveryService,
-videoFileIndexRepository:
-    videoRepository,
-videoFileAnalysisQueue:
-    analysisQueue);
+                videoFileIndexRepository:
+                    videoRepository,
+                videoFileAnalysisQueue:
+                    analysisQueue);
+
 
 
         var result =
@@ -713,15 +713,16 @@ videoFileAnalysisQueue:
             repository,
             videoFileDiscoveryService ??
                 new EmptyVideoFileDiscoveryService(),
-videoFileIndexRepository ??
-    new RecordingVideoFileIndexRepository(),
-videoFileAnalysisQueue ??
-    new RecordingVideoFileAnalysisQueue(),
-stateRepository ??
+            videoFileIndexRepository ??
+                new RecordingVideoFileIndexRepository(),
+            videoFileAnalysisQueue ??
+                new RecordingVideoFileAnalysisQueue(),
+            stateRepository ??
                 new RecordingFolderIndexingStateRepository(),
             new TextNormalizationService(),
             new RussianSearchStemService(),
             NullLogger<FolderIndexingService>.Instance);
+
     }
 
 
