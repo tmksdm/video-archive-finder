@@ -42,6 +42,11 @@ public static class DependencyInjection
             FfprobeJsonParser>();
 
         services.AddSingleton<
+            IVideoFileAnalysisService,
+            VideoFileAnalysisService>();
+
+
+        services.AddSingleton<
             IApplicationDataDirectoryProvider,
             LocalApplicationDataDirectoryProvider>();
 
