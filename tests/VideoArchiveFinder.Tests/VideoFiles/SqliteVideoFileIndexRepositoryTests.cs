@@ -748,6 +748,227 @@ public sealed class SqliteVideoFileIndexRepositoryTests
                     TimeSpan.Zero));
     }
 
+    [Fact]
+    public async Task UpdateThumbnailAsync_StoresSuccessfulThumbnail()
+    {
+        var repository = await CreateRepositoryAsync();
+
+        var sourceId = Guid.NewGuid();
+        var folderPath =
+            @"C:\Archive\Folder";
+        var videoPath =
+            @"C:\Archive\Folder\Video.mp4";
+
+        var lastWriteTimeUtc =
+            new DateTimeOffset(
+                2026,
+                8,
+                17,
+                10,
+                0,
+                0,
+                TimeSpan.Zero);
+
+        await repository.UpsertBatchAsync(
+        [
+            CreateFile(
+                fullPath: videoPath,
+                name: "Video.mp4",
+                folderFullPath: folderPath,
+                rootSourceId: sourceId,
+                sizeBytes: 1_000,
+                lastWriteTimeUtc: lastWriteTimeUtc)
+        ]);
+
+        var wasUpdated =
+            await repository.UpdateThumbnailAsync(
+                new VideoFileThumbnailUpdate(
+                    RootSourceId: sourceId,
+                    FullPath: videoPath,
+                    SizeBytes: 1_000,
+                    LastWriteTimeUtc: lastWriteTimeUtc,
+                    State:
+                        VideoFileThumbnailState.Succeeded,
+                    ThumbnailPath:
+                        @"C:\Cache\thumbnail.jpg"));
+
+        Assert.True(wasUpdated);
+
+        var files =
+            await repository.GetByFolderPathAsync(
+                sourceId,
+                folderPath);
+
+        var file = Assert.Single(files);
+
+        Assert.Equal(
+            VideoFileThumbnailState.Succeeded,
+            file.ThumbnailState);
+
+        Assert.Equal(
+            @"C:\Cache\thumbnail.jpg",
+            file.ThumbnailPath);
+    }
+
+    [Fact]
+    public async Task UpdateThumbnailAsync_WhenFileChanged_DoesNotStoreStaleResult()
+    {
+        var repository = await CreateRepositoryAsync();
+
+        var sourceId = Guid.NewGuid();
+        var folderPath =
+            @"C:\Archive\Folder";
+        var videoPath =
+            @"C:\Archive\Folder\Video.mp4";
+
+        var lastWriteTimeUtc =
+            new DateTimeOffset(
+                2026,
+                8,
+                17,
+                10,
+                0,
+                0,
+                TimeSpan.Zero);
+
+        await repository.UpsertBatchAsync(
+        [
+            CreateFile(
+                fullPath: videoPath,
+                name: "Video.mp4",
+                folderFullPath: folderPath,
+                rootSourceId: sourceId,
+                sizeBytes: 1_000,
+                lastWriteTimeUtc: lastWriteTimeUtc)
+        ]);
+
+        var wrongSizeWasUpdated =
+            await repository.UpdateThumbnailAsync(
+                new VideoFileThumbnailUpdate(
+                    RootSourceId: sourceId,
+                    FullPath: videoPath,
+                    SizeBytes: 999,
+                    LastWriteTimeUtc: lastWriteTimeUtc,
+                    State:
+                        VideoFileThumbnailState.Succeeded,
+                    ThumbnailPath:
+                        @"C:\Cache\wrong-size.jpg"));
+
+        var wrongDateWasUpdated =
+            await repository.UpdateThumbnailAsync(
+                new VideoFileThumbnailUpdate(
+                    RootSourceId: sourceId,
+                    FullPath: videoPath,
+                    SizeBytes: 1_000,
+                    LastWriteTimeUtc:
+                        lastWriteTimeUtc.AddMinutes(-1),
+                    State:
+                        VideoFileThumbnailState.Succeeded,
+                    ThumbnailPath:
+                        @"C:\Cache\wrong-date.jpg"));
+
+        Assert.False(wrongSizeWasUpdated);
+        Assert.False(wrongDateWasUpdated);
+
+        var files =
+            await repository.GetByFolderPathAsync(
+                sourceId,
+                folderPath);
+
+        var file = Assert.Single(files);
+
+        Assert.Equal(
+            VideoFileThumbnailState.NotGenerated,
+            file.ThumbnailState);
+
+        Assert.Null(file.ThumbnailPath);
+    }
+
+    [Fact]
+    public async Task UpsertBatchAsync_PreservesThumbnailOnlyForUnchangedFile()
+    {
+        var repository = await CreateRepositoryAsync();
+
+        var sourceId = Guid.NewGuid();
+        var folderPath =
+            @"C:\Archive\Folder";
+        var videoPath =
+            @"C:\Archive\Folder\Video.mp4";
+
+        var lastWriteTimeUtc =
+            new DateTimeOffset(
+                2026,
+                8,
+                17,
+                10,
+                0,
+                0,
+                TimeSpan.Zero);
+
+        var originalFile =
+            CreateFile(
+                fullPath: videoPath,
+                name: "Video.mp4",
+                folderFullPath: folderPath,
+                rootSourceId: sourceId,
+                sizeBytes: 1_000,
+                lastWriteTimeUtc: lastWriteTimeUtc);
+
+        await repository.UpsertBatchAsync([originalFile]);
+
+        Assert.True(
+            await repository.UpdateThumbnailAsync(
+                new VideoFileThumbnailUpdate(
+                    RootSourceId: sourceId,
+                    FullPath: videoPath,
+                    SizeBytes: 1_000,
+                    LastWriteTimeUtc: lastWriteTimeUtc,
+                    State:
+                        VideoFileThumbnailState.Succeeded,
+                    ThumbnailPath:
+                        @"C:\Cache\thumbnail.jpg")));
+
+        await repository.UpsertBatchAsync([originalFile]);
+
+        var unchangedFile =
+            Assert.Single(
+                await repository.GetByFolderPathAsync(
+                    sourceId,
+                    folderPath));
+
+        Assert.Equal(
+            VideoFileThumbnailState.Succeeded,
+            unchangedFile.ThumbnailState);
+
+        Assert.Equal(
+            @"C:\Cache\thumbnail.jpg",
+            unchangedFile.ThumbnailPath);
+
+        await repository.UpsertBatchAsync(
+        [
+            CreateFile(
+                fullPath: videoPath,
+                name: "Video.mp4",
+                folderFullPath: folderPath,
+                rootSourceId: sourceId,
+                sizeBytes: 2_000,
+                lastWriteTimeUtc: lastWriteTimeUtc)
+        ]);
+
+        var changedFile =
+            Assert.Single(
+                await repository.GetByFolderPathAsync(
+                    sourceId,
+                    folderPath));
+
+        Assert.Equal(
+            VideoFileThumbnailState.NotGenerated,
+            changedFile.ThumbnailState);
+
+        Assert.Null(changedFile.ThumbnailPath);
+    }
+
+
     public void Dispose()
     {
         Microsoft.Data.Sqlite

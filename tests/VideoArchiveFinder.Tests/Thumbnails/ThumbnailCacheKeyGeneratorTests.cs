@@ -159,6 +159,9 @@ public sealed class ThumbnailCacheKeyGeneratorTests
         DateTimeOffset? lastWriteTimeUtc = null)
     {
         return new StaticThumbnailRequest(
+            RootSourceId:
+            Guid.Parse(
+                "11111111-1111-1111-1111-111111111111"),
             videoPath ?? Path.Combine(
                 "archive",
                 "Видео",

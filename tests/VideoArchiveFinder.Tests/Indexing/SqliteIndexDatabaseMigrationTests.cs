@@ -54,7 +54,7 @@ public sealed class SqliteIndexDatabaseMigrationTests
         await connection.OpenAsync();
 
         Assert.Equal(
-            4,
+            5,
             await GetSchemaVersionAsync(connection));
 
 

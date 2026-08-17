@@ -10,6 +10,10 @@ public interface IVideoFileIndexRepository
         VideoFileAnalysisUpdate update,
         CancellationToken cancellationToken = default);
 
+    Task<bool> UpdateThumbnailAsync(
+        VideoFileThumbnailUpdate update,
+        CancellationToken cancellationToken = default);
+
     Task<int> CompleteFolderScanAsync(
         Guid rootSourceId,
         string folderFullPath,

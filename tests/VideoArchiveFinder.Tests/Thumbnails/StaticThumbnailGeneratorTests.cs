@@ -385,6 +385,9 @@ public sealed class StaticThumbnailGeneratorTests
         string videoPath)
     {
         return new StaticThumbnailRequest(
+            RootSourceId:
+            Guid.Parse(
+                "11111111-1111-1111-1111-111111111111"),
             videoPath,
             13,
             new DateTimeOffset(

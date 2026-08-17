@@ -162,6 +162,28 @@ public sealed class SqliteVideoFileIndexRepository
                             THEN VideoFiles.AnalysisState
                             ELSE 0
                         END,
+                    ThumbnailState =
+                        CASE
+                            WHEN
+                                VideoFiles.SizeBytes =
+                                    excluded.SizeBytes
+                                AND
+                                VideoFiles.LastWriteTimeUtc =
+                                    excluded.LastWriteTimeUtc
+                            THEN VideoFiles.ThumbnailState
+                            ELSE 0
+                        END,
+                    ThumbnailPath =
+                        CASE
+                            WHEN
+                                VideoFiles.SizeBytes =
+                                    excluded.SizeBytes
+                                AND
+                                VideoFiles.LastWriteTimeUtc =
+                                    excluded.LastWriteTimeUtc
+                            THEN VideoFiles.ThumbnailPath
+                            ELSE NULL
+                        END,
                     SizeBytes = excluded.SizeBytes,
                     LastWriteTimeUtc =
                         excluded.LastWriteTimeUtc,
@@ -395,6 +417,121 @@ public sealed class SqliteVideoFileIndexRepository
         return affectedRows == 1;
     }
 
+    public async Task<bool> UpdateThumbnailAsync(
+        VideoFileThumbnailUpdate update,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+
+        if (update.RootSourceId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Root source identifier cannot be empty.",
+                nameof(update));
+        }
+
+        if (string.IsNullOrWhiteSpace(update.FullPath))
+        {
+            throw new ArgumentException(
+                "Video file path cannot be empty.",
+                nameof(update));
+        }
+
+        if (update.SizeBytes < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(update),
+                "Video file size cannot be negative.");
+        }
+
+        if (!Enum.IsDefined(update.State))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(update),
+                "Thumbnail state is not supported.");
+        }
+
+        if (update.State ==
+                VideoFileThumbnailState.Succeeded &&
+            string.IsNullOrWhiteSpace(
+                update.ThumbnailPath))
+        {
+            throw new ArgumentException(
+                "Successful thumbnail update requires a path.",
+                nameof(update));
+        }
+
+        if (update.State !=
+                VideoFileThumbnailState.Succeeded &&
+            update.ThumbnailPath is not null)
+        {
+            throw new ArgumentException(
+                "Only a successful thumbnail update can have a path.",
+                nameof(update));
+        }
+
+        await using var connection = CreateConnection();
+
+        await connection
+            .OpenAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        await ConfigureConnectionAsync(
+                connection,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        await using var command =
+            connection.CreateCommand();
+
+        command.CommandText =
+            """
+        UPDATE VideoFiles
+        SET
+            ThumbnailState = $thumbnailState,
+            ThumbnailPath = $thumbnailPath
+        WHERE
+            RootSourceId = $rootSourceId
+            AND FullPath = $fullPath
+            AND SizeBytes = $sizeBytes
+            AND LastWriteTimeUtc = $lastWriteTimeUtc;
+        """;
+
+        command.Parameters.AddWithValue(
+            "$thumbnailState",
+            (int)update.State);
+
+        command.Parameters.AddWithValue(
+            "$thumbnailPath",
+            update.ThumbnailPath is null
+                ? DBNull.Value
+                : update.ThumbnailPath);
+
+        command.Parameters.AddWithValue(
+            "$rootSourceId",
+            update.RootSourceId.ToString("D"));
+
+        command.Parameters.AddWithValue(
+            "$fullPath",
+            update.FullPath);
+
+        command.Parameters.AddWithValue(
+            "$sizeBytes",
+            update.SizeBytes);
+
+        command.Parameters.AddWithValue(
+            "$lastWriteTimeUtc",
+            update.LastWriteTimeUtc.ToString(
+                "O",
+                CultureInfo.InvariantCulture));
+
+        var affectedRows =
+            await command
+                .ExecuteNonQueryAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+        return affectedRows == 1;
+    }
 
     public async Task<int> CompleteFolderScanAsync(
         Guid rootSourceId,
@@ -499,7 +636,9 @@ public sealed class SqliteVideoFileIndexRepository
                 Width,
                 Height,
                 Codec,
-                AnalysisState
+                AnalysisState,
+                ThumbnailState,
+                ThumbnailPath
             FROM VideoFiles
             WHERE RootSourceId = $rootSourceId
               AND FolderFullPath = $folderFullPath
@@ -567,7 +706,14 @@ Codec:
         : reader.GetString(14),
 AnalysisState:
     (VideoFileAnalysisState)
-        reader.GetInt32(15)));
+        reader.GetInt32(15),
+ThumbnailState:
+    (VideoFileThumbnailState)
+        reader.GetInt32(16),
+ThumbnailPath:
+    reader.IsDBNull(17)
+        ? null
+        : reader.GetString(17)));
 
         }
 

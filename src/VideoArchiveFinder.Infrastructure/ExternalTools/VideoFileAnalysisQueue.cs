@@ -200,6 +200,8 @@ public sealed class VideoFileAnalysisQueue
                         await _thumbnailGenerationQueue
                             .EnqueueAsync(
                                 new StaticThumbnailRequest(
+                                    RootSourceId:
+                                    request.RootSourceId,
                                     VideoPath:
                                         request.FullPath,
                                     SizeBytes:

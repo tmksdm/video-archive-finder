@@ -5,7 +5,7 @@ using VideoArchiveFinder.Infrastructure.Indexing;
 
 namespace VideoArchiveFinder.Tests.Indexing;
 
-public sealed class SqliteVideoMetadataSchemaMigrationTests
+public sealed class SqliteVideoThumbnailSchemaMigrationTests
     : IDisposable
 {
     private readonly string _temporaryDirectory =
@@ -15,7 +15,7 @@ public sealed class SqliteVideoMetadataSchemaMigrationTests
             Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public async Task InitializeAsync_Version3Database_PreservesVideoFiles()
+    public async Task InitializeAsync_Version4Database_PreservesVideoFiles()
     {
         var databasePath =
             Path.Combine(
@@ -28,7 +28,7 @@ public sealed class SqliteVideoMetadataSchemaMigrationTests
 
         var sourceId = Guid.NewGuid();
 
-        await CreateVersion3DatabaseAsync(
+        await CreateVersion4DatabaseAsync(
             databasePath,
             sourceId);
 
@@ -70,7 +70,9 @@ public sealed class SqliteVideoMetadataSchemaMigrationTests
                 Width,
                 Height,
                 Codec,
-                AnalysisState
+                AnalysisState,
+                ThumbnailState,
+                ThumbnailPath
             FROM VideoFiles;
             """;
 
@@ -83,20 +85,39 @@ public sealed class SqliteVideoMetadataSchemaMigrationTests
             @"C:\Archive\Folder\Video.mp4",
             reader.GetString(0));
 
-        Assert.True(reader.IsDBNull(1));
-        Assert.True(reader.IsDBNull(2));
-        Assert.True(reader.IsDBNull(3));
-        Assert.True(reader.IsDBNull(4));
-        Assert.True(reader.IsDBNull(5));
+        Assert.Equal(
+            1,
+            reader.GetInt32(1));
+
+        Assert.Equal(
+            TimeSpan.FromMinutes(2).Ticks,
+            reader.GetInt64(2));
+
+        Assert.Equal(
+            1920,
+            reader.GetInt32(3));
+
+        Assert.Equal(
+            1080,
+            reader.GetInt32(4));
+
+        Assert.Equal(
+            "h264",
+            reader.GetString(5));
+
+        Assert.Equal(
+            2,
+            reader.GetInt32(6));
 
         Assert.Equal(
             0,
-            reader.GetInt32(6));
+            reader.GetInt32(7));
 
+        Assert.True(reader.IsDBNull(8));
         Assert.False(await reader.ReadAsync());
     }
 
-    private static async Task CreateVersion3DatabaseAsync(
+    private static async Task CreateVersion4DatabaseAsync(
         string databasePath,
         Guid sourceId)
     {
@@ -131,7 +152,41 @@ public sealed class SqliteVideoMetadataSchemaMigrationTests
                 IsAvailable INTEGER NOT NULL
                     CHECK (IsAvailable IN (0, 1)),
 
-                LastSeenUtc TEXT NOT NULL
+                LastSeenUtc TEXT NOT NULL,
+
+                HasVideoStream INTEGER NULL
+                    CHECK
+                    (
+                        HasVideoStream IS NULL OR
+                        HasVideoStream IN (0, 1)
+                    ),
+
+                DurationTicks INTEGER NULL
+                    CHECK
+                    (
+                        DurationTicks IS NULL OR
+                        DurationTicks >= 0
+                    ),
+
+                Width INTEGER NULL
+                    CHECK
+                    (
+                        Width IS NULL OR
+                        Width > 0
+                    ),
+
+                Height INTEGER NULL
+                    CHECK
+                    (
+                        Height IS NULL OR
+                        Height > 0
+                    ),
+
+                Codec TEXT NULL,
+
+                AnalysisState INTEGER NOT NULL
+                    DEFAULT 0
+                    CHECK (AnalysisState IN (0, 1, 2))
             );
 
             INSERT INTO VideoFiles
@@ -145,7 +200,13 @@ public sealed class SqliteVideoMetadataSchemaMigrationTests
                 FolderFullPath,
                 RootSourceId,
                 IsAvailable,
-                LastSeenUtc
+                LastSeenUtc,
+                HasVideoStream,
+                DurationTicks,
+                Width,
+                Height,
+                Codec,
+                AnalysisState
             )
             VALUES
             (
@@ -154,19 +215,29 @@ public sealed class SqliteVideoMetadataSchemaMigrationTests
                 'video.mp4',
                 '.mp4',
                 1000,
-                '2026-08-14T10:00:00.0000000+00:00',
+                '2026-08-17T10:00:00.0000000+00:00',
                 'C:\Archive\Folder',
                 $rootSourceId,
                 1,
-                '2026-08-14T12:00:00.0000000+00:00'
+                '2026-08-17T12:00:00.0000000+00:00',
+                1,
+                $durationTicks,
+                1920,
+                1080,
+                'h264',
+                2
             );
 
-            PRAGMA user_version = 3;
+            PRAGMA user_version = 4;
             """;
 
         command.Parameters.AddWithValue(
             "$rootSourceId",
-            sourceId.ToString());
+            sourceId.ToString("D"));
+
+        command.Parameters.AddWithValue(
+            "$durationTicks",
+            TimeSpan.FromMinutes(2).Ticks);
 
         await command.ExecuteNonQueryAsync();
     }

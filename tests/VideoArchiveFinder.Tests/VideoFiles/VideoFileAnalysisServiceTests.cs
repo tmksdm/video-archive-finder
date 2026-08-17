@@ -326,6 +326,17 @@ public sealed class VideoFileAnalysisServiceTests
             return Task.FromResult(UpdateResult);
         }
 
+        public Task<bool> UpdateThumbnailAsync(
+            VideoFileThumbnailUpdate update,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ArgumentNullException.ThrowIfNull(update);
+
+            return Task.FromResult(false);
+        }
+
+
         public Task<int> CompleteFolderScanAsync(
             Guid rootSourceId,
             string folderFullPath,

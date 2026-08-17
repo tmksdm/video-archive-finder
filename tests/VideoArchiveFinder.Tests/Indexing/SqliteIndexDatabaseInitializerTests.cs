@@ -31,7 +31,7 @@ public sealed class SqliteIndexDatabaseInitializerTests
         await connection.OpenAsync();
 
         Assert.Equal(
-            4,
+            5,
             await GetSchemaVersionAsync(connection));
 
         var tableNames = await ReadStringsAsync(
@@ -217,7 +217,7 @@ public sealed class SqliteIndexDatabaseInitializerTests
 
         Assert.Equal(1, folderCount);
         Assert.Equal(
-            4,
+            5,
             await GetSchemaVersionAsync(verificationConnection));
     }
 

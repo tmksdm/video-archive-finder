@@ -255,6 +255,9 @@ public sealed class StaticThumbnailGenerationQueueTests
         int index)
     {
         return new StaticThumbnailRequest(
+            RootSourceId:
+            Guid.Parse(
+                "11111111-1111-1111-1111-111111111111"),
             VideoPath:
                 $@"C:\Archive\Video{index}.mp4",
             SizeBytes: 1_024 + index,

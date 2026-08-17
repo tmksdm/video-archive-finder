@@ -17,4 +17,7 @@ public sealed record IndexedVideoFile(
     int? Height = null,
     string? Codec = null,
     VideoFileAnalysisState AnalysisState =
-        VideoFileAnalysisState.NotAnalyzed);
+        VideoFileAnalysisState.NotAnalyzed,
+    VideoFileThumbnailState ThumbnailState =
+        VideoFileThumbnailState.NotGenerated,
+    string? ThumbnailPath = null);

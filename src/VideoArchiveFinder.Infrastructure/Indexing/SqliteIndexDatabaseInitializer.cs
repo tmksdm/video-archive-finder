@@ -7,7 +7,7 @@ namespace VideoArchiveFinder.Infrastructure.Indexing;
 public sealed class SqliteIndexDatabaseInitializer
     : IIndexDatabaseInitializer
 {
-    private const int CurrentSchemaVersion = 4;
+    private const int CurrentSchemaVersion = 5;
 
     private readonly IndexDatabasePathProvider
         _databasePathProvider;
@@ -120,7 +120,21 @@ public sealed class SqliteIndexDatabaseInitializer
                         connection,
                         cancellationToken)
                     .ConfigureAwait(false);
+
+                schemaVersion = 4;
             }
+
+            if (schemaVersion == 4)
+            {
+                await SqliteVideoThumbnailSchemaMigration
+                    .MigrateFromVersion4ToVersion5Async(
+                        connection,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                schemaVersion = 5;
+            }
+
 
 
 
