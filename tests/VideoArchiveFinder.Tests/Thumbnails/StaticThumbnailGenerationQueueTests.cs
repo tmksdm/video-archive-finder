@@ -64,6 +64,7 @@ public sealed class StaticThumbnailGenerationQueueTests
         await using var queue =
             new StaticThumbnailGenerationQueue(
                 generator,
+                new RecordingVideoFileIndexRepository(),
                 NullLogger<
                     StaticThumbnailGenerationQueue>.Instance,
                 maximumParallelism: 2,
@@ -115,6 +116,7 @@ public sealed class StaticThumbnailGenerationQueueTests
         await using var queue =
             new StaticThumbnailGenerationQueue(
                 generator,
+                new RecordingVideoFileIndexRepository(),
                 NullLogger<
                     StaticThumbnailGenerationQueue>.Instance,
                 maximumParallelism: 1,
@@ -184,6 +186,7 @@ public sealed class StaticThumbnailGenerationQueueTests
         var queue =
             new StaticThumbnailGenerationQueue(
                 generator,
+                new RecordingVideoFileIndexRepository(),
                 NullLogger<
                     StaticThumbnailGenerationQueue>.Instance,
                 maximumParallelism: 1,
@@ -232,6 +235,7 @@ public sealed class StaticThumbnailGenerationQueueTests
         await using var queue =
             new StaticThumbnailGenerationQueue(
                 generator,
+                new RecordingVideoFileIndexRepository(),
                 NullLogger<
                     StaticThumbnailGenerationQueue>.Instance,
                 maximumParallelism: 1,

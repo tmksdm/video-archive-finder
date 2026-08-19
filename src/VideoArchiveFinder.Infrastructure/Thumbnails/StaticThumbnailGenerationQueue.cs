@@ -1,6 +1,7 @@
 ﻿using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using VideoArchiveFinder.Application.Thumbnails;
+using VideoArchiveFinder.Application.VideoFiles;
 
 namespace VideoArchiveFinder.Infrastructure.Thumbnails;
 
@@ -15,6 +16,9 @@ public sealed class StaticThumbnailGenerationQueue
     private readonly IStaticThumbnailGenerator
         _thumbnailGenerator;
 
+    private readonly IVideoFileIndexRepository
+        _videoFileIndexRepository;
+
     private readonly ILogger<StaticThumbnailGenerationQueue>
         _logger;
 
@@ -27,12 +31,16 @@ public sealed class StaticThumbnailGenerationQueue
 
     public StaticThumbnailGenerationQueue(
         IStaticThumbnailGenerator thumbnailGenerator,
+        IVideoFileIndexRepository videoFileIndexRepository,
         ILogger<StaticThumbnailGenerationQueue> logger,
         int maximumParallelism = 2,
         int capacity = 128)
     {
         ArgumentNullException.ThrowIfNull(
             thumbnailGenerator);
+
+        ArgumentNullException.ThrowIfNull(
+            videoFileIndexRepository);
 
         ArgumentNullException.ThrowIfNull(logger);
 
@@ -51,6 +59,8 @@ public sealed class StaticThumbnailGenerationQueue
         }
 
         _thumbnailGenerator = thumbnailGenerator;
+        _videoFileIndexRepository =
+            videoFileIndexRepository;
         _logger = logger;
 
         _channel =
@@ -82,6 +92,28 @@ public sealed class StaticThumbnailGenerationQueue
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+
+        if (request.RootSourceId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Root source identifier cannot be empty.",
+                nameof(request));
+        }
+
+        if (string.IsNullOrWhiteSpace(
+            request.VideoPath))
+        {
+            throw new ArgumentException(
+                "Video path cannot be empty.",
+                nameof(request));
+        }
+
+        if (request.SizeBytes < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(request),
+                "Video file size cannot be negative.");
+        }
 
         ObjectDisposedException.ThrowIf(
             Volatile.Read(ref _isDisposed) != 0,
@@ -148,23 +180,9 @@ public sealed class StaticThumbnailGenerationQueue
             {
                 try
                 {
-                    var result =
-                        await _thumbnailGenerator
-                            .GenerateAsync(
-                                request,
-                                stoppingToken);
-
-                    if (!result.IsSuccess)
-                    {
-                        _logger.LogWarning(
-                            "Static thumbnail generation " +
-                            "did not succeed for {VideoPath}. " +
-                            "Status: {Status}. Details: " +
-                            "{DiagnosticMessage}",
-                            request.VideoPath,
-                            result.Status,
-                            result.DiagnosticMessage);
-                    }
+                    await ProcessRequestAsync(
+                        request,
+                        stoppingToken);
                 }
                 catch (OperationCanceledException)
                     when (stoppingToken
@@ -177,7 +195,7 @@ public sealed class StaticThumbnailGenerationQueue
                     _logger.LogError(
                         exception,
                         "Background static thumbnail " +
-                        "generation failed for {VideoPath}. " +
+                        "processing failed for {VideoPath}. " +
                         "Queue processing will continue.",
                         request.VideoPath);
                 }
@@ -189,5 +207,168 @@ public sealed class StaticThumbnailGenerationQueue
         {
             // Остановка очереди является штатной.
         }
+    }
+
+    private async Task ProcessRequestAsync(
+        StaticThumbnailRequest request,
+        CancellationToken stoppingToken)
+    {
+        var pendingWasStored =
+            await UpdateThumbnailAsync(
+                request,
+                VideoFileThumbnailState.Pending,
+                thumbnailPath: null,
+                stoppingToken);
+
+        if (!pendingWasStored)
+        {
+            _logger.LogInformation(
+                "Static thumbnail request for {VideoPath} " +
+                "is stale and will not be processed.",
+                request.VideoPath);
+
+            return;
+        }
+
+        StaticThumbnailGenerationResult result;
+
+        try
+        {
+            result =
+                await _thumbnailGenerator.GenerateAsync(
+                    request,
+                    stoppingToken);
+        }
+        catch (OperationCanceledException)
+            when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                exception,
+                "Static thumbnail generation threw an " +
+                "exception for {VideoPath}.",
+                request.VideoPath);
+
+            await TryStoreFailedStateAsync(
+                request,
+                stoppingToken);
+
+            return;
+        }
+
+        if (result.IsSuccess &&
+            !string.IsNullOrWhiteSpace(
+                result.ThumbnailPath))
+        {
+            await StoreFinalStateAsync(
+                request,
+                VideoFileThumbnailState.Succeeded,
+                result.ThumbnailPath,
+                stoppingToken);
+
+            return;
+        }
+
+        if (result.IsSuccess)
+        {
+            _logger.LogWarning(
+                "Static thumbnail generation reported " +
+                "success without a thumbnail path for " +
+                "{VideoPath}.",
+                request.VideoPath);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "Static thumbnail generation did not " +
+                "succeed for {VideoPath}. Status: " +
+                "{Status}. Details: {DiagnosticMessage}",
+                request.VideoPath,
+                result.Status,
+                result.DiagnosticMessage);
+        }
+
+        await StoreFinalStateAsync(
+            request,
+            VideoFileThumbnailState.Failed,
+            thumbnailPath: null,
+            stoppingToken);
+    }
+
+    private async Task StoreFinalStateAsync(
+        StaticThumbnailRequest request,
+        VideoFileThumbnailState state,
+        string? thumbnailPath,
+        CancellationToken cancellationToken)
+    {
+        var wasStored =
+            await UpdateThumbnailAsync(
+                request,
+                state,
+                thumbnailPath,
+                cancellationToken);
+
+        if (!wasStored)
+        {
+            _logger.LogInformation(
+                "Static thumbnail result for {VideoPath} " +
+                "was not stored because the indexed file " +
+                "changed or was removed.",
+                request.VideoPath);
+        }
+    }
+
+    private async Task TryStoreFailedStateAsync(
+        StaticThumbnailRequest request,
+        CancellationToken stoppingToken)
+    {
+        try
+        {
+            await StoreFinalStateAsync(
+                request,
+                VideoFileThumbnailState.Failed,
+                thumbnailPath: null,
+                stoppingToken);
+        }
+        catch (OperationCanceledException)
+            when (stoppingToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                exception,
+                "Failed to persist the thumbnail failure " +
+                "state for {VideoPath}.",
+                request.VideoPath);
+        }
+    }
+
+    private Task<bool> UpdateThumbnailAsync(
+        StaticThumbnailRequest request,
+        VideoFileThumbnailState state,
+        string? thumbnailPath,
+        CancellationToken cancellationToken)
+    {
+        return _videoFileIndexRepository
+            .UpdateThumbnailAsync(
+                new VideoFileThumbnailUpdate(
+                    RootSourceId:
+                        request.RootSourceId,
+                    FullPath:
+                        request.VideoPath,
+                    SizeBytes:
+                        request.SizeBytes,
+                    LastWriteTimeUtc:
+                        request.LastWriteTimeUtc,
+                    State:
+                        state,
+                    ThumbnailPath:
+                        thumbnailPath),
+                cancellationToken);
     }
 }
