@@ -52,9 +52,6 @@ public sealed class WpfThumbnailImageLoader
         image.CacheOption =
             BitmapCacheOption.OnLoad;
 
-        image.CreateOptions =
-            BitmapCreateOptions.IgnoreImageCache;
-
         image.DecodePixelWidth =
             decodePixelWidth;
 
