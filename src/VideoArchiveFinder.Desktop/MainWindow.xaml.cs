@@ -4,7 +4,6 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using VideoArchiveFinder.Application.Search;
 using VideoArchiveFinder.Application.Settings;
-using VideoArchiveFinder.Application.VideoFiles;
 using VideoArchiveFinder.Desktop.Services;
 using VideoArchiveFinder.Desktop.ViewModels;
 
@@ -460,7 +459,8 @@ public partial class MainWindow : Window
             ItemsControl.ContainerFromElement(
                 videoFilesList,
                 sourceElement) is not ListBoxItem videoItem ||
-            videoItem.DataContext is not IndexedVideoFile videoFile)
+            videoItem.DataContext is not
+                VideoFileCardViewModel videoFile)
         {
             return;
         }

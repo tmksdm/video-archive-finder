@@ -40,6 +40,9 @@ public partial class App : System.Windows.Application
             .ConfigureServices(services =>
             {
                 services.AddVideoArchiveFinderInfrastructure();
+                services.AddSingleton<
+                    IThumbnailImageLoader,
+                    WpfThumbnailImageLoader>();
                 services.AddSingleton<IWindowsShellService, WindowsShellService>();
                 services.AddSingleton<IClipboardService, WindowsClipboardService>();
                 services.AddSingleton<

@@ -7,6 +7,7 @@ namespace VideoArchiveFinder.Infrastructure.Thumbnails;
 
 public sealed class StaticThumbnailGenerationQueue
     : IStaticThumbnailGenerationQueue,
+      IStaticThumbnailStateChangeSource,
       IAsyncDisposable,
       IDisposable
 {
@@ -28,6 +29,10 @@ public sealed class StaticThumbnailGenerationQueue
     private readonly Task[] _workers;
 
     private int _isDisposed;
+
+    public event EventHandler<
+        StaticThumbnailStateChangedEventArgs>?
+        StateChanged;
 
     public StaticThumbnailGenerationQueue(
         IStaticThumbnailGenerator thumbnailGenerator,
@@ -348,27 +353,77 @@ public sealed class StaticThumbnailGenerationQueue
         }
     }
 
-    private Task<bool> UpdateThumbnailAsync(
+    private async Task<bool> UpdateThumbnailAsync(
         StaticThumbnailRequest request,
         VideoFileThumbnailState state,
         string? thumbnailPath,
         CancellationToken cancellationToken)
     {
-        return _videoFileIndexRepository
-            .UpdateThumbnailAsync(
-                new VideoFileThumbnailUpdate(
-                    RootSourceId:
-                        request.RootSourceId,
-                    FullPath:
-                        request.VideoPath,
-                    SizeBytes:
-                        request.SizeBytes,
-                    LastWriteTimeUtc:
-                        request.LastWriteTimeUtc,
-                    State:
-                        state,
-                    ThumbnailPath:
-                        thumbnailPath),
-                cancellationToken);
+        var wasUpdated =
+            await _videoFileIndexRepository
+                .UpdateThumbnailAsync(
+                    new VideoFileThumbnailUpdate(
+                        RootSourceId:
+                            request.RootSourceId,
+                        FullPath:
+                            request.VideoPath,
+                        SizeBytes:
+                            request.SizeBytes,
+                        LastWriteTimeUtc:
+                            request.LastWriteTimeUtc,
+                        State:
+                            state,
+                        ThumbnailPath:
+                            thumbnailPath),
+                    cancellationToken);
+
+        if (wasUpdated)
+        {
+            PublishStateChanged(
+                request,
+                state,
+                thumbnailPath);
+        }
+
+        return wasUpdated;
     }
+
+    private void PublishStateChanged(
+        StaticThumbnailRequest request,
+        VideoFileThumbnailState state,
+        string? thumbnailPath)
+    {
+        var handlers = StateChanged;
+
+        if (handlers is null)
+        {
+            return;
+        }
+
+        var eventArgs =
+            new StaticThumbnailStateChangedEventArgs(
+                request,
+                state,
+                thumbnailPath);
+
+        foreach (EventHandler<
+                     StaticThumbnailStateChangedEventArgs>
+                 handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                handler(this, eventArgs);
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(
+                    exception,
+                    "A thumbnail state notification " +
+                    "handler failed for {VideoPath}.",
+                    request.VideoPath);
+            }
+        }
+    }
+
+
 }

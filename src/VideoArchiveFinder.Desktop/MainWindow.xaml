@@ -30,6 +30,53 @@ StateChanged="MainWindow_StateChanged"
         <BooleanToVisibilityConverter
             x:Key="BooleanToVisibilityConverter"/>
 
+        <DataTemplate x:Key="VideoThumbnailTemplate">
+            <Grid ClipToBounds="True"
+          Background="{DynamicResource AppSurfaceAlternativeBrush}">
+
+                <Image Source="{Binding ThumbnailImage}"
+               HorizontalAlignment="Stretch"
+               VerticalAlignment="Stretch"
+               Stretch="UniformToFill"
+               SnapsToDevicePixels="True"/>
+
+                <Grid Visibility="{Binding IsThumbnailPlaceholderVisible,
+                                   Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <materialDesign:PackIcon Width="38"
+                                     Height="38"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center"
+                                     Foreground="{DynamicResource AppSecondaryTextBrush}"
+                                     Kind="Movie"/>
+                </Grid>
+
+                <ProgressBar Height="4"
+                     Margin="8,0"
+                     VerticalAlignment="Bottom"
+                     IsIndeterminate="True"
+                     Visibility="{Binding IsThumbnailPending,
+                                          Converter={StaticResource BooleanToVisibilityConverter}}"
+                     ToolTip="Создание миниатюры"/>
+
+                <Border HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                Margin="6"
+                Padding="4"
+                Background="{DynamicResource AppSurfaceBrush}"
+                BorderBrush="{DynamicResource AppBorderBrush}"
+                BorderThickness="1"
+                Visibility="{Binding IsThumbnailFailed,
+                                     Converter={StaticResource BooleanToVisibilityConverter}}"
+                ToolTip="Не удалось загрузить миниатюру">
+                    <materialDesign:PackIcon Width="18"
+                                     Height="18"
+                                     Foreground="{DynamicResource AppSecondaryTextBrush}"
+                                     Kind="AlertCircleOutline"/>
+                </Border>
+            </Grid>
+        </DataTemplate>
+
+
         <SolidColorBrush x:Key="CaptionButtonHoverBrush"
                          Color="{DynamicResource AppHoverColor}"/>
 
@@ -1043,16 +1090,11 @@ Text="{Binding IndexingStatusText}"
 Background="{DynamicResource AppSurfaceAlternativeBrush}"
 BorderBrush="{DynamicResource AppBorderBrush}"
                             BorderThickness="0,0,0,1">
-                                                        <Grid>
-                                                            <materialDesign:PackIcon Width="42"
-                                                     Height="42"
-                                                     HorizontalAlignment="Center"
-                                                     VerticalAlignment="Center"
-                                                     Foreground="{DynamicResource AppMutedTextBrush}"
-                                                     Kind="Movie"/>
+                                                        <ContentControl Content="{Binding}"
+                ContentTemplate="{StaticResource VideoThumbnailTemplate}"
+                HorizontalContentAlignment="Stretch"
+                VerticalContentAlignment="Stretch"/>
 
-
-                                                        </Grid>
                                                     </Border>
 
                                                     <Grid Grid.Row="1"
@@ -1103,32 +1145,49 @@ BorderBrush="{DynamicResource AppBorderBrush}"
                             ToolTip="{Binding FullPath}">
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="96"/>
                                                         <ColumnDefinition Width="*"/>
                                                         <ColumnDefinition Width="80"/>
                                                         <ColumnDefinition Width="120"/>
                                                         <ColumnDefinition Width="150"/>
                                                     </Grid.ColumnDefinitions>
 
-                                                    <TextBlock Grid.Column="0"
+                                                    <Border Grid.Column="0"
+        Width="88"
+        Height="50"
+        Margin="0,0,8,0"
+        VerticalAlignment="Center"
+        Background="{DynamicResource AppSurfaceAlternativeBrush}"
+        BorderBrush="{DynamicResource AppBorderBrush}"
+        BorderThickness="1"
+        ClipToBounds="True">
+                                                        <ContentControl Content="{Binding}"
+                    ContentTemplate="{StaticResource VideoThumbnailTemplate}"
+                    HorizontalContentAlignment="Stretch"
+                    VerticalContentAlignment="Stretch"/>
+                                                    </Border>
+
+
+                                                    <TextBlock Grid.Column="1"
                                        Margin="0,0,8,0"
                                        VerticalAlignment="Center"
                                        Text="{Binding Name}"
                                        TextTrimming="CharacterEllipsis"/>
 
-                                                    <TextBlock Grid.Column="1"
+                                                    <TextBlock Grid.Column="2"
                                        Margin="0,0,8,0"
                                        VerticalAlignment="Center"
                                        Foreground="{DynamicResource AppSecondaryTextBrush}"
                                        Text="{Binding Extension}"/>
 
-                                                    <TextBlock Grid.Column="2"
+                                                    <TextBlock Grid.Column="3"
                                        Margin="0,0,8,0"
                                        VerticalAlignment="Center"
                                        Foreground="{DynamicResource AppSecondaryTextBrush}"
                                        Text="{Binding SizeBytes,
                                               StringFormat={}{0:N0} байт}"/>
 
-                                                    <TextBlock Grid.Column="3"
+                                                    <TextBlock Grid.Column="4"
                                        VerticalAlignment="Center"
                                        Foreground="{DynamicResource AppSecondaryTextBrush}"
                                        Text="{Binding LastWriteTimeUtc,

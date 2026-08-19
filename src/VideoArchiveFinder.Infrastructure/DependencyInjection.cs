@@ -33,8 +33,19 @@ public static class DependencyInjection
             StaticThumbnailGenerator>();
 
         services.AddSingleton<
-            IStaticThumbnailGenerationQueue,
             StaticThumbnailGenerationQueue>();
+
+        services.AddSingleton<
+            IStaticThumbnailGenerationQueue>(
+                serviceProvider =>
+                    serviceProvider.GetRequiredService<
+                        StaticThumbnailGenerationQueue>());
+
+        services.AddSingleton<
+            IStaticThumbnailStateChangeSource>(
+                serviceProvider =>
+                    serviceProvider.GetRequiredService<
+                        StaticThumbnailGenerationQueue>());
 
         services.AddSingleton<
             IFfmpegToolsLocator,

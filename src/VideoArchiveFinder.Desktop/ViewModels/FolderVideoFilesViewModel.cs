@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using VideoArchiveFinder.Application.Search;
 using VideoArchiveFinder.Application.VideoFiles;
 using VideoArchiveFinder.Application.Settings;
+using VideoArchiveFinder.Application.Thumbnails;
 using VideoArchiveFinder.Desktop.Services;
 
 namespace VideoArchiveFinder.Desktop.ViewModels;
@@ -15,6 +16,18 @@ public partial class FolderVideoFilesViewModel
 {
     private readonly IVideoFileIndexRepository
         _videoFileIndexRepository;
+
+    private readonly IThumbnailImageLoader
+        _thumbnailImageLoader;
+
+    private readonly IStaticThumbnailGenerationQueue
+        _thumbnailGenerationQueue;
+
+    private readonly IVideoFileAnalysisQueue
+        _videoFileAnalysisQueue;
+
+    private readonly IStaticThumbnailStateChangeSource
+        _thumbnailStateChangeSource;
 
     private readonly IWindowsShellService
         _windowsShellService;
@@ -26,6 +39,8 @@ public partial class FolderVideoFilesViewModel
         _logger;
 
     private CancellationTokenSource? _loadCancellation;
+    private CancellationTokenSource?
+        _thumbnailLoadCancellation;
     private int _loadVersion;
     private bool _isDisposed;
 
@@ -53,6 +68,13 @@ public partial class FolderVideoFilesViewModel
 
     public FolderVideoFilesViewModel(
         IVideoFileIndexRepository videoFileIndexRepository,
+        IThumbnailImageLoader thumbnailImageLoader,
+        IStaticThumbnailGenerationQueue
+            thumbnailGenerationQueue,
+        IVideoFileAnalysisQueue
+            videoFileAnalysisQueue,
+        IStaticThumbnailStateChangeSource
+            thumbnailStateChangeSource,
         IWindowsShellService windowsShellService,
         IUserSettingsStore userSettingsStore,
         ILogger<FolderVideoFilesViewModel> logger)
@@ -60,6 +82,21 @@ public partial class FolderVideoFilesViewModel
     {
         _videoFileIndexRepository =
             videoFileIndexRepository;
+
+        _thumbnailImageLoader =
+            thumbnailImageLoader;
+
+        _thumbnailGenerationQueue =
+            thumbnailGenerationQueue;
+
+        _videoFileAnalysisQueue =
+            videoFileAnalysisQueue;
+
+        _thumbnailStateChangeSource =
+            thumbnailStateChangeSource;
+
+        _thumbnailStateChangeSource.StateChanged +=
+            OnStaticThumbnailStateChanged;
 
         _windowsShellService =
             windowsShellService;
@@ -139,7 +176,7 @@ public partial class FolderVideoFilesViewModel
 
 
 
-    public ObservableCollection<IndexedVideoFile> Files
+    public ObservableCollection<VideoFileCardViewModel> Files
     {
         get;
     } = [];
@@ -155,6 +192,10 @@ public partial class FolderVideoFilesViewModel
         ObjectDisposedException.ThrowIf(
             _isDisposed,
             this);
+
+        var thumbnailCancellationToken =
+            ResetThumbnailLoading(
+                cancellationToken);
 
         var version = Interlocked.Increment(
             ref _loadVersion);
@@ -213,10 +254,60 @@ public partial class FolderVideoFilesViewModel
                 return;
             }
 
+            var cardsToQueue =
+                new List<VideoFileCardViewModel>();
+
+            var cardsToAnalyze =
+                new List<VideoFileCardViewModel>();
+
             foreach (var file in files)
             {
-                Files.Add(file);
+                var card =
+                    new VideoFileCardViewModel(file);
+
+                Files.Add(card);
+
+                if (card.ThumbnailState ==
+                        VideoFileThumbnailState.Succeeded &&
+                    !string.IsNullOrWhiteSpace(
+                        card.ThumbnailPath))
+                {
+                    _ = LoadSavedThumbnailAsync(
+                        card,
+                        thumbnailCancellationToken);
+                }
+
+                if (card.ThumbnailState ==
+                        VideoFileThumbnailState.NotGenerated &&
+                    card.HasVideoStream == true &&
+                    card.IsAvailable)
+                {
+                    cardsToQueue.Add(card);
+                }
+
+                if (card.AnalysisState ==
+                        VideoFileAnalysisState.NotAnalyzed &&
+                    card.IsAvailable)
+                {
+                    cardsToAnalyze.Add(card);
+                }
             }
+
+
+            if (cardsToQueue.Count > 0)
+            {
+                _ = QueueMissingThumbnailsAsync(
+                    cardsToQueue,
+                    thumbnailCancellationToken);
+            }
+
+            if (cardsToAnalyze.Count > 0)
+            {
+                _ = QueueVideoAnalysisAsync(
+                    cardsToAnalyze,
+                    thumbnailCancellationToken);
+            }
+
 
             OnPropertyChanged(nameof(HasFiles));
 
@@ -280,7 +371,8 @@ public partial class FolderVideoFilesViewModel
 
     [RelayCommand]
     private async Task OpenVideoAsync(
-        IndexedVideoFile? videoFile)
+    VideoFileCardViewModel? videoFile)
+
     {
         if (videoFile is null)
         {
@@ -317,6 +409,265 @@ public partial class FolderVideoFilesViewModel
         }
     }
 
+    private CancellationToken ResetThumbnailLoading(
+        CancellationToken cancellationToken)
+    {
+        var current =
+            CancellationTokenSource
+                .CreateLinkedTokenSource(
+                    cancellationToken);
+
+        var previous =
+            Interlocked.Exchange(
+                ref _thumbnailLoadCancellation,
+                current);
+
+        if (previous is not null)
+        {
+            previous.Cancel();
+            previous.Dispose();
+        }
+
+        return current.Token;
+    }
+
+    private async Task LoadSavedThumbnailAsync(
+        VideoFileCardViewModel card,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var thumbnailPath =
+                card.ThumbnailPath;
+
+            if (string.IsNullOrWhiteSpace(
+                thumbnailPath))
+            {
+                return;
+            }
+
+            card.IsThumbnailLoading = true;
+
+            var decodePixelWidth =
+                Math.Clamp(
+                    (int)Math.Ceiling(
+                        GridCardWidth * 1.5),
+                    160,
+                    480);
+
+            var image =
+                await _thumbnailImageLoader.LoadAsync(
+                    thumbnailPath,
+                    decodePixelWidth,
+                    cancellationToken);
+
+            cancellationToken
+                .ThrowIfCancellationRequested();
+
+            if (!Files.Contains(card))
+            {
+                return;
+            }
+
+            card.SetThumbnailImage(image);
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken
+                .IsCancellationRequested)
+        {
+            // Выбрана другая папка или закрывается приложение.
+        }
+        catch (Exception exception)
+        {
+            if (Files.Contains(card))
+            {
+                card.SetThumbnailLoadFailure();
+            }
+
+            _logger.LogWarning(
+                exception,
+                "Could not load the saved thumbnail " +
+                "for {VideoPath}.",
+                card.FullPath);
+        }
+    }
+
+
+    private async Task QueueVideoAnalysisAsync(
+        IReadOnlyList<VideoFileCardViewModel> cards,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            foreach (var card in cards)
+            {
+                cancellationToken
+                    .ThrowIfCancellationRequested();
+
+                if (!Files.Contains(card) ||
+                    card.AnalysisState !=
+                        VideoFileAnalysisState.NotAnalyzed)
+                {
+                    continue;
+                }
+
+                await _videoFileAnalysisQueue.EnqueueAsync(
+                    new VideoFileAnalysisRequest(
+                        RootSourceId:
+                            card.RootSourceId,
+                        FullPath:
+                            card.FullPath,
+                        SizeBytes:
+                            card.SizeBytes,
+                        LastWriteTimeUtc:
+                            card.LastWriteTimeUtc),
+                    cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            // Выбрана другая папка или закрывается приложение.
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                exception,
+                "Could not enqueue video analysis " +
+                "for the selected folder.");
+        }
+    }
+
+    private async Task QueueMissingThumbnailsAsync(
+        IReadOnlyList<VideoFileCardViewModel> cards,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            foreach (var card in cards)
+            {
+                cancellationToken
+                    .ThrowIfCancellationRequested();
+
+                if (!Files.Contains(card) ||
+                    card.ThumbnailState !=
+                        VideoFileThumbnailState.NotGenerated)
+                {
+                    continue;
+                }
+
+                await _thumbnailGenerationQueue.EnqueueAsync(
+                    new StaticThumbnailRequest(
+                        RootSourceId:
+                            card.RootSourceId,
+                        VideoPath:
+                            card.FullPath,
+                        SizeBytes:
+                            card.SizeBytes,
+                        LastWriteTimeUtc:
+                            card.LastWriteTimeUtc),
+                    cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            // Выбрана другая папка или закрывается приложение.
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                exception,
+                "Could not enqueue static thumbnails " +
+                "for the selected folder.");
+        }
+    }
+
+
+    private void OnStaticThumbnailStateChanged(
+        object? sender,
+        StaticThumbnailStateChangedEventArgs eventArgs)
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        var dispatcher =
+            System.Windows.Application.Current?.Dispatcher;
+
+        if (dispatcher is null ||
+            dispatcher.HasShutdownStarted ||
+            dispatcher.HasShutdownFinished)
+        {
+            return;
+        }
+
+        if (dispatcher.CheckAccess())
+        {
+            ApplyThumbnailStateChange(eventArgs);
+            return;
+        }
+
+        _ = dispatcher.InvokeAsync(
+            () => ApplyThumbnailStateChange(eventArgs));
+    }
+
+    private void ApplyThumbnailStateChange(
+        StaticThumbnailStateChangedEventArgs eventArgs)
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        var request = eventArgs.Request;
+
+        var card = Files.FirstOrDefault(
+            item =>
+                item.RootSourceId ==
+                    request.RootSourceId &&
+                string.Equals(
+                    item.FullPath,
+                    request.VideoPath,
+                    StringComparison.OrdinalIgnoreCase) &&
+                item.SizeBytes ==
+                    request.SizeBytes &&
+                item.LastWriteTimeUtc ==
+                    request.LastWriteTimeUtc);
+
+        if (card is null)
+        {
+            return;
+        }
+
+        card.ApplyThumbnailState(
+            eventArgs.State,
+            eventArgs.ThumbnailPath);
+
+        if (eventArgs.State !=
+                VideoFileThumbnailState.Succeeded ||
+            string.IsNullOrWhiteSpace(
+                eventArgs.ThumbnailPath))
+        {
+            return;
+        }
+
+        var cancellation =
+            _thumbnailLoadCancellation;
+
+        if (cancellation is null ||
+            cancellation.IsCancellationRequested)
+        {
+            return;
+        }
+
+        _ = LoadSavedThumbnailAsync(
+            card,
+            cancellation.Token);
+    }
+
+
     private static Task<bool> FileExistsAsync(
         string filePath)
     {
@@ -350,6 +701,9 @@ public partial class FolderVideoFilesViewModel
 
         _isDisposed = true;
 
+        _thumbnailStateChangeSource.StateChanged -=
+            OnStaticThumbnailStateChanged;
+
         Interlocked.Increment(
             ref _loadVersion);
 
@@ -358,5 +712,16 @@ public partial class FolderVideoFilesViewModel
             null);
 
         cancellation?.Cancel();
+
+        var thumbnailCancellation =
+            Interlocked.Exchange(
+                ref _thumbnailLoadCancellation,
+                null);
+
+        if (thumbnailCancellation is not null)
+        {
+            thumbnailCancellation.Cancel();
+            thumbnailCancellation.Dispose();
+        }
     }
 }

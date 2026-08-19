@@ -80,6 +80,86 @@ public sealed class
     }
 
     [Fact]
+    public async Task SuccessfulGeneration_PublishesPendingThenSucceeded()
+    {
+        var request = CreateRequest();
+
+        var completed = CreateCompletionSource();
+
+        var notifications =
+            new ConcurrentQueue<
+                StaticThumbnailStateChangedEventArgs>();
+
+        var repository =
+            new RecordingVideoFileIndexRepository();
+
+        var generator =
+            new TestStaticThumbnailGenerator(
+                (_, _) => Task.FromResult(
+                    new StaticThumbnailGenerationResult(
+                        Status:
+                            StaticThumbnailGenerationStatus
+                                .Generated,
+                        ThumbnailPath:
+                            @"C:\Cache\thumbnail.jpg",
+                        ExitCode: 0,
+                        DiagnosticMessage:
+                            string.Empty)));
+
+        await using var queue =
+            CreateQueue(
+                generator,
+                repository);
+
+        queue.StateChanged += (_, eventArgs) =>
+        {
+            notifications.Enqueue(eventArgs);
+
+            if (eventArgs.State ==
+                VideoFileThumbnailState.Succeeded)
+            {
+                completed.TrySetResult();
+            }
+        };
+
+        await queue.EnqueueAsync(request);
+
+        await completed.Task.WaitAsync(
+            TimeSpan.FromSeconds(5));
+
+        Assert.Collection(
+            notifications,
+            pending =>
+            {
+                Assert.Same(
+                    request,
+                    pending.Request);
+
+                Assert.Equal(
+                    VideoFileThumbnailState.Pending,
+                    pending.State);
+
+                Assert.Null(
+                    pending.ThumbnailPath);
+            },
+            succeeded =>
+            {
+                Assert.Same(
+                    request,
+                    succeeded.Request);
+
+                Assert.Equal(
+                    VideoFileThumbnailState.Succeeded,
+                    succeeded.State);
+
+                Assert.Equal(
+                    @"C:\Cache\thumbnail.jpg",
+                    succeeded.ThumbnailPath);
+            });
+    }
+
+
+    [Fact]
     public async Task UnsuccessfulGeneration_PersistsPendingThenFailed()
     {
         var request = CreateRequest();
