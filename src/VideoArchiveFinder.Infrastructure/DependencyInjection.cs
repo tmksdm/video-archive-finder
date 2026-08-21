@@ -29,6 +29,13 @@ public static class DependencyInjection
             ThumbnailCacheKeyGenerator>();
 
         services.AddSingleton<
+            ThumbnailCachePathProvider>();
+
+        services.AddSingleton<
+            IThumbnailCacheStateRepository,
+            SqliteThumbnailCacheStateRepository>();
+
+        services.AddSingleton<
             IStaticThumbnailGenerator,
             StaticThumbnailGenerator>();
 

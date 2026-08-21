@@ -1,7 +1,6 @@
 ﻿using System.Globalization;
 using Microsoft.Extensions.Logging;
 using VideoArchiveFinder.Application.ExternalTools;
-using VideoArchiveFinder.Application.Storage;
 using VideoArchiveFinder.Application.Thumbnails;
 using VideoArchiveFinder.Infrastructure.ExternalTools;
 
@@ -15,25 +14,19 @@ public sealed class StaticThumbnailGenerator
 
     private readonly IFfmpegToolsLocator _toolsLocator;
     private readonly IExternalProcessRunner _processRunner;
-    private readonly IApplicationDataDirectoryProvider
-        _applicationDataDirectoryProvider;
-    private readonly IThumbnailCacheKeyGenerator
-        _cacheKeyGenerator;
+    private readonly ThumbnailCachePathProvider
+        _cachePathProvider;
     private readonly ILogger<StaticThumbnailGenerator> _logger;
 
     public StaticThumbnailGenerator(
         IFfmpegToolsLocator toolsLocator,
         IExternalProcessRunner processRunner,
-        IApplicationDataDirectoryProvider
-            applicationDataDirectoryProvider,
-        IThumbnailCacheKeyGenerator cacheKeyGenerator,
+        ThumbnailCachePathProvider cachePathProvider,
         ILogger<StaticThumbnailGenerator> logger)
     {
         _toolsLocator = toolsLocator;
         _processRunner = processRunner;
-        _applicationDataDirectoryProvider =
-            applicationDataDirectoryProvider;
-        _cacheKeyGenerator = cacheKeyGenerator;
+        _cachePathProvider = cachePathProvider;
         _logger = logger;
     }
 
@@ -185,20 +178,8 @@ public sealed class StaticThumbnailGenerator
     private string CreateThumbnailPath(
         StaticThumbnailRequest request)
     {
-        var key = _cacheKeyGenerator.GenerateKey(
+        return _cachePathProvider.GetThumbnailPath(
             request);
-
-        var cacheDirectory = Path.Combine(
-            _applicationDataDirectoryProvider
-                .GetApplicationDataDirectory(),
-            "Cache",
-            "Thumbnails",
-            $"v{StaticThumbnailProfile.CacheFormatVersion}",
-            key[..2]);
-
-        return Path.Combine(
-            cacheDirectory,
-            $"{key}.jpg");
     }
 
     private static string CreateTemporaryPath(

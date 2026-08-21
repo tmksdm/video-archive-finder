@@ -350,16 +350,20 @@ public sealed class StaticThumbnailGeneratorTests
         bool ffmpegExists = true,
         FfmpegToolsStatus? toolsStatus = null)
     {
+        var cachePathProvider =
+            new ThumbnailCachePathProvider(
+                new FakeApplicationDataDirectoryProvider(
+                    Path.Combine(
+                        _temporaryDirectory,
+                        "app-data")),
+                new ThumbnailCacheKeyGenerator());
+
         return new StaticThumbnailGenerator(
             new FakeFfmpegToolsLocator(
                 toolsStatus ??
                 CreateToolsStatus(ffmpegExists)),
             processRunner,
-            new FakeApplicationDataDirectoryProvider(
-                Path.Combine(
-                    _temporaryDirectory,
-                    "app-data")),
-            new ThumbnailCacheKeyGenerator(),
+            cachePathProvider,
             NullLogger<
                 StaticThumbnailGenerator>.Instance);
     }
