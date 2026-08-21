@@ -1,0 +1,89 @@
+﻿<Window x:Class="VideoArchiveFinder.HoverScrubPrototype.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vlc="clr-namespace:LibVLCSharp.WPF;assembly=LibVLCSharp.WPF"
+        Title="Hover Scrubbing — технический прототип"
+        Width="1000"
+        Height="700"
+        MinWidth="760"
+        MinHeight="520"
+        WindowStartupLocation="CenterScreen">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0"
+              Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Button x:Name="SelectVideoButton"
+                    Grid.Column="0"
+                    MinWidth="150"
+                    Padding="14,8"
+                    Click="SelectVideoButton_Click"
+                    Content="Выбрать видео"/>
+
+            <TextBlock x:Name="SelectedFileText"
+                       Grid.Column="1"
+                       Margin="12,0,0,0"
+                       VerticalAlignment="Center"
+                       Text="Видео не выбрано"
+                       TextTrimming="CharacterEllipsis"
+                       ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+        </Grid>
+
+        <Border Grid.Row="1"
+                Background="Black"
+                BorderBrush="#707070"
+                BorderThickness="1"
+                ClipToBounds="True">
+            <vlc:VideoView x:Name="ScrubVideoView">
+                <!--
+                Этот слой должен находиться внутри VideoView.
+                Это необходимо из-за WPF airspace-ограничений.
+                Полностью прозрачный фон не получает события мыши.
+                -->
+                <Grid x:Name="ScrubInputLayer"
+                      Background="#01000000"
+                      MouseEnter="ScrubInputLayer_MouseEnter"
+                      MouseMove="ScrubInputLayer_MouseMove"
+                      MouseLeave="ScrubInputLayer_MouseLeave">
+
+                    <TextBlock x:Name="VideoHintText"
+                               Margin="24"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Foreground="White"
+                               FontSize="20"
+                               Text="Выберите локальное видео"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               IsHitTestVisible="False"/>
+
+                    <Border HorizontalAlignment="Left"
+                            VerticalAlignment="Bottom"
+                            Margin="12"
+                            Padding="8,4"
+                            Background="#B0000000"
+                            IsHitTestVisible="False">
+                        <TextBlock x:Name="PositionText"
+                                   Foreground="White"
+                                   Text="Позиция: —"/>
+                    </Border>
+                </Grid>
+            </vlc:VideoView>
+        </Border>
+
+        <TextBlock x:Name="StatusText"
+                   Grid.Row="2"
+                   Margin="0,12,0,0"
+                   Text="Выберите один локальный видеофайл."
+                   TextWrapping="Wrap"/>
+    </Grid>
+</Window>
