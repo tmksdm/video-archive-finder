@@ -455,6 +455,13 @@ public sealed class VideoFileAnalysisQueueTests
 
             return ValueTask.CompletedTask;
         }
+
+        public Task WaitForIdleAsync(
+            CancellationToken cancellationToken =
+                default)
+        {
+            return Task.CompletedTask;
+        }
     }
 
 

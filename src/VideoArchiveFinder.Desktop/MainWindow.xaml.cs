@@ -4,8 +4,10 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using VideoArchiveFinder.Application.Search;
 using VideoArchiveFinder.Application.Settings;
+using VideoArchiveFinder.Application.Thumbnails;
 using VideoArchiveFinder.Desktop.Services;
 using VideoArchiveFinder.Desktop.ViewModels;
+using VideoArchiveFinder.Desktop.Views;
 
 
 namespace VideoArchiveFinder.Desktop;
@@ -14,6 +16,16 @@ public partial class MainWindow : Window
 {
     private readonly IAppThemeService
         _appThemeService;
+
+    private readonly IThumbnailCacheService
+        _thumbnailCacheService;
+
+    private readonly IWindowsShellService
+        _windowsShellService;
+
+    private readonly Microsoft.Extensions.Logging
+        .ILogger<CacheSettingsDialog>
+        _cacheDialogLogger;
 
     private bool _isSynchronizingVideoSelection;
 
@@ -30,9 +42,16 @@ public partial class MainWindow : Window
 
     public MainWindow(
         MainWindowViewModel viewModel,
-        IAppThemeService appThemeService)
+        IAppThemeService appThemeService,
+        IThumbnailCacheService thumbnailCacheService,
+        IWindowsShellService windowsShellService,
+        Microsoft.Extensions.Logging.ILogger<
+            CacheSettingsDialog> cacheDialogLogger)
     {
         _appThemeService = appThemeService;
+        _thumbnailCacheService = thumbnailCacheService;
+        _windowsShellService = windowsShellService;
+        _cacheDialogLogger = cacheDialogLogger;
 
         InitializeComponent();
 
@@ -188,6 +207,31 @@ public partial class MainWindow : Window
         EventArgs e)
     {
         UpdateThemeMenuChecks();
+    }
+
+    private void OpenThumbnailCacheDialog_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        SettingsContextMenu.IsOpen = false;
+
+        var dialog = new CacheSettingsDialog(
+            _thumbnailCacheService,
+            _windowsShellService,
+            _cacheDialogLogger);
+
+        dialog.Owner = this;
+
+        dialog.ShowDialog();
+
+        if (!dialog.WasCacheCleared ||
+            DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        _ = viewModel.VideoFiles.SelectFolderAsync(
+            viewModel.VideoFiles.SelectedFolder);
     }
 
     private void MainWindow_Closed(

@@ -255,6 +255,88 @@ public sealed class StaticThumbnailGenerationQueueTests
             Volatile.Read(ref callCount));
     }
 
+    [Fact]
+    public async Task WaitForIdleAsync_CompletesImmediately_WhenQueueIsEmpty()
+    {
+        await using var queue =
+            new StaticThumbnailGenerationQueue(
+                new TestStaticThumbnailGenerator(
+                    (_, _) => Task.FromResult(
+                        SuccessfulResult())),
+                new RecordingVideoFileIndexRepository(),
+                NullLogger<
+                    StaticThumbnailGenerationQueue>.Instance);
+
+        await queue.WaitForIdleAsync()
+            .WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task WaitForIdleAsync_WaitsUntilRequestsAreProcessed()
+    {
+        var firstRequestStarted =
+            CreateCompletionSource();
+
+        var releaseGenerator =
+            CreateCompletionSource();
+
+        var generator =
+            new TestStaticThumbnailGenerator(
+                async (_, cancellationToken) =>
+                {
+                    firstRequestStarted.TrySetResult();
+
+                    await releaseGenerator.Task
+                        .WaitAsync(cancellationToken);
+
+                    return SuccessfulResult();
+                });
+
+        await using var queue =
+            new StaticThumbnailGenerationQueue(
+                generator,
+                new RecordingVideoFileIndexRepository(),
+                NullLogger<
+                    StaticThumbnailGenerationQueue>.Instance,
+                maximumParallelism: 1,
+                capacity: 4);
+
+        await queue.EnqueueAsync(
+            CreateRequest(1));
+
+        await firstRequestStarted.Task.WaitAsync(
+            TimeSpan.FromSeconds(5));
+
+        var idleWait = queue.WaitForIdleAsync();
+
+        await Task.Delay(100);
+
+        Assert.False(idleWait.IsCompleted);
+
+        using var cancellationSource =
+            new CancellationTokenSource();
+
+        var cancelledWait =
+            queue.WaitForIdleAsync(
+                cancellationSource.Token);
+
+        await Task.Delay(50);
+
+        cancellationSource.Cancel();
+
+        await Assert.ThrowsAnyAsync<
+            OperationCanceledException>(
+            () => cancelledWait);
+
+        releaseGenerator.TrySetResult();
+
+        await idleWait.WaitAsync(
+            TimeSpan.FromSeconds(5));
+
+        await queue.WaitForIdleAsync()
+            .WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
     private static StaticThumbnailRequest CreateRequest(
         int index)
     {

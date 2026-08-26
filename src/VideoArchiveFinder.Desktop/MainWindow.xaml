@@ -311,6 +311,14 @@ Text="{Binding Search.SearchText,
                       ToolTip="Всегда использовать тёмную тему"
                       AutomationProperties.Name="Тёмная тема"/>
 
+                                <Separator/>
+
+                                <MenuItem x:Name="ThumbnailCacheMenuItem"
+                      Header="Кэш миниатюр..."
+                      Click="OpenThumbnailCacheDialog_Click"
+                      ToolTip="Просмотр и очистка кэша миниатюр"
+                      AutomationProperties.Name="Кэш миниатюр"/>
+
                             </ContextMenu>
                         </Button.ContextMenu>
 

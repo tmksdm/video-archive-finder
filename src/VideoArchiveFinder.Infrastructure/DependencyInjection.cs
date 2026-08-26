@@ -36,6 +36,10 @@ public static class DependencyInjection
             SqliteThumbnailCacheStateRepository>();
 
         services.AddSingleton<
+            IThumbnailCacheService,
+            ThumbnailCacheService>();
+
+        services.AddSingleton<
             IStaticThumbnailGenerator,
             StaticThumbnailGenerator>();
 

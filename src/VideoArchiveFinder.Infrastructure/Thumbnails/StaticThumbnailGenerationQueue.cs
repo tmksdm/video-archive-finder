@@ -30,6 +30,13 @@ public sealed class StaticThumbnailGenerationQueue
 
     private int _isDisposed;
 
+    private readonly object _idleStateLock = new();
+
+    private readonly Queue<TaskCompletionSource>
+        _idleWaiters = new();
+
+    private int _pendingRequestCount;
+
     public event EventHandler<
         StaticThumbnailStateChangedEventArgs>?
         StateChanged;
@@ -124,6 +131,11 @@ public sealed class StaticThumbnailGenerationQueue
             Volatile.Read(ref _isDisposed) != 0,
             this);
 
+        lock (_idleStateLock)
+        {
+            _pendingRequestCount++;
+        }
+
         try
         {
             await _channel.Writer.WriteAsync(
@@ -133,8 +145,97 @@ public sealed class StaticThumbnailGenerationQueue
         catch (ChannelClosedException)
             when (Volatile.Read(ref _isDisposed) != 0)
         {
+            OnRequestCompleted();
+
             throw new ObjectDisposedException(
                 nameof(StaticThumbnailGenerationQueue));
+        }
+        catch
+        {
+            OnRequestCompleted();
+
+            throw;
+        }
+    }
+
+    public async Task WaitForIdleAsync(
+        CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(
+            Volatile.Read(ref _isDisposed) != 0,
+            this);
+
+        TaskCompletionSource waiter;
+
+        lock (_idleStateLock)
+        {
+            if (_pendingRequestCount == 0)
+            {
+                return;
+            }
+
+            waiter = new TaskCompletionSource(
+                TaskCreationOptions
+                    .RunContinuationsAsynchronously);
+
+            _idleWaiters.Enqueue(waiter);
+        }
+
+        await waiter.Task
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private void OnRequestCompleted()
+    {
+        TaskCompletionSource[]? waitersToComplete =
+            null;
+
+        lock (_idleStateLock)
+        {
+            if (_pendingRequestCount > 0)
+            {
+                _pendingRequestCount--;
+            }
+
+            if (_pendingRequestCount != 0 ||
+                _idleWaiters.Count == 0)
+            {
+                return;
+            }
+
+            waitersToComplete =
+                _idleWaiters.ToArray();
+
+            _idleWaiters.Clear();
+        }
+
+        foreach (var waiter in waitersToComplete)
+        {
+            waiter.TrySetResult();
+        }
+    }
+
+    private void CompleteIdleWaitersOnStop()
+    {
+        TaskCompletionSource[]? waitersToCancel;
+
+        lock (_idleStateLock)
+        {
+            if (_idleWaiters.Count == 0)
+            {
+                return;
+            }
+
+            waitersToCancel =
+                _idleWaiters.ToArray();
+
+            _idleWaiters.Clear();
+        }
+
+        foreach (var waiter in waitersToCancel)
+        {
+            waiter.TrySetCanceled();
         }
     }
 
@@ -171,6 +272,7 @@ public sealed class StaticThumbnailGenerationQueue
         finally
         {
             _stoppingTokenSource.Dispose();
+            CompleteIdleWaitersOnStop();
         }
     }
 
@@ -203,6 +305,10 @@ public sealed class StaticThumbnailGenerationQueue
                         "processing failed for {VideoPath}. " +
                         "Queue processing will continue.",
                         request.VideoPath);
+                }
+                finally
+                {
+                    OnRequestCompleted();
                 }
             }
         }
