@@ -18,6 +18,8 @@ public partial class MainWindow : Window
     private LibVLC? _libVlc;
     private MediaPlayer? _mediaPlayer;
     private Media? _activeMedia;
+    private StreamMediaInput? _activeMediaInput;
+    private Stream? _activeMediaStream;
 
     private string? _selectedFilePath;
     private double? _pendingPosition;
@@ -27,7 +29,7 @@ public partial class MainWindow : Window
     private bool _isMediaReady;
     private bool _isDisposed;
 
-    public MainWindow()
+    public MainWindow(string? initialFilePath = null)
     {
         InitializeComponent();
 
@@ -38,6 +40,11 @@ public partial class MainWindow : Window
 
         _seekTimer.Tick += SeekTimer_Tick;
         Closed += MainWindow_Closed;
+
+        if (!string.IsNullOrWhiteSpace(initialFilePath))
+        {
+            SelectVideo(initialFilePath);
+        }
     }
 
     private void SelectVideoButton_Click(
@@ -61,11 +68,16 @@ public partial class MainWindow : Window
             return;
         }
 
+        SelectVideo(dialog.FileName);
+    }
+
+    private void SelectVideo(string filePath)
+    {
         ReleaseActiveMedia();
 
-        _selectedFilePath = dialog.FileName;
+        _selectedFilePath = filePath;
 
-        SelectedFileText.Text = _selectedFilePath;
+        SelectedFileText.Text = filePath;
         VideoHintText.Text =
             "Наведите курсор и перемещайте его влево и вправо";
 
@@ -166,6 +178,8 @@ public partial class MainWindow : Window
     private async Task OpenSelectedMediaAsync(
         int sessionVersion)
     {
+        var readinessStopwatch = Stopwatch.StartNew();
+
         try
         {
             EnsurePlayerCreated();
@@ -180,10 +194,9 @@ public partial class MainWindow : Window
             StatusText.Text = "Открытие видео…";
             VideoHintText.Text = string.Empty;
 
-            var media = new Media(
+            var media = CreateMedia(
                 _libVlc,
-                _selectedFilePath,
-                FromType.FromPath);
+                _selectedFilePath);
 
             _activeMedia = media;
             _mediaPlayer.Media = media;
@@ -235,8 +248,16 @@ public partial class MainWindow : Window
             _pendingPosition ??= 0d;
             _seekTimer.Start();
 
+            readinessStopwatch.Stop();
+
+            var workingSetMegabytes =
+                Process.GetCurrentProcess().WorkingSet64 /
+                (1024d * 1024d);
+
             StatusText.Text =
-                "Пауза без звука. Перемещайте курсор по области видео.";
+                $"Готово за {readinessStopwatch.ElapsedMilliseconds} мс; " +
+                $"память {workingSetMegabytes:F0} МБ. " +
+                "Пауза без звука.";
         }
         catch (Exception exception)
         {
@@ -282,6 +303,36 @@ public partial class MainWindow : Window
         };
 
         ScrubVideoView.MediaPlayer = _mediaPlayer;
+    }
+
+    private Media CreateMedia(
+        LibVLC libVlc,
+        string filePath)
+    {
+        if (!filePath.StartsWith(
+                @"\\",
+                StringComparison.Ordinal))
+        {
+            return new Media(
+                libVlc,
+                filePath,
+                FromType.FromPath);
+        }
+
+        _activeMediaStream = new FileStream(
+            filePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 64 * 1024,
+            FileOptions.RandomAccess);
+
+        _activeMediaInput = new StreamMediaInput(
+            _activeMediaStream);
+
+        return new Media(
+            libVlc,
+            _activeMediaInput);
     }
 
     private static async Task<bool> StartPlaybackAndWaitAsync(
@@ -416,6 +467,12 @@ public partial class MainWindow : Window
         var media = _activeMedia;
         _activeMedia = null;
 
+        var mediaInput = _activeMediaInput;
+        _activeMediaInput = null;
+
+        var mediaStream = _activeMediaStream;
+        _activeMediaStream = null;
+
         if (_mediaPlayer is not null)
         {
             try
@@ -430,6 +487,8 @@ public partial class MainWindow : Window
         }
 
         media?.Dispose();
+        mediaInput?.Dispose();
+        mediaStream?.Dispose();
     }
 
     private void MainWindow_Closed(
