@@ -45,15 +45,19 @@ public partial class MainWindow : Window
         IAppThemeService appThemeService,
         IThumbnailCacheService thumbnailCacheService,
         IWindowsShellService windowsShellService,
+        Microsoft.Extensions.Logging.ILogger<MainWindow>
+            hoverScrubLogger,
         Microsoft.Extensions.Logging.ILogger<
             CacheSettingsDialog> cacheDialogLogger)
     {
         _appThemeService = appThemeService;
         _thumbnailCacheService = thumbnailCacheService;
         _windowsShellService = windowsShellService;
+        _hoverScrubLogger = hoverScrubLogger;
         _cacheDialogLogger = cacheDialogLogger;
 
         InitializeComponent();
+        InitializeHoverScrubbing();
 
         DataContext = viewModel;
 
@@ -238,6 +242,8 @@ public partial class MainWindow : Window
         object? sender,
         EventArgs e)
     {
+        DisposeHoverScrubbing();
+
         _appThemeService.ThemeChanged -=
             AppThemeService_ThemeChanged;
 

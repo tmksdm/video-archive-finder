@@ -4,6 +4,7 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         xmlns:controls="clr-namespace:VideoArchiveFinder.Desktop.Controls"
+        xmlns:vlc="clr-namespace:LibVLCSharp.WPF;assembly=LibVLCSharp.WPF"
         Title="Video Archive Finder"
         Width="1280"
         Height="800"
@@ -144,7 +145,8 @@ StateChanged="MainWindow_StateChanged"
 
 
 
-    <Grid Background="{DynamicResource AppWindowBackgroundBrush}">
+    <Grid x:Name="RootLayout"
+          Background="{DynamicResource AppWindowBackgroundBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="32"/>
             <RowDefinition Height="*"/>
@@ -1082,8 +1084,7 @@ Text="{Binding IndexingStatusText}"
                                         <DataTemplate>
                                             <Border Background="{DynamicResource AppSurfaceBrush}"
                     BorderBrush="{DynamicResource AppBorderBrush}"
-                    BorderThickness="1"
-                    ToolTip="{Binding FullPath}">
+                    BorderThickness="1">
                                                 <Grid>
                                                     <Grid.RowDefinitions>
                                                         <RowDefinition Height="Auto"/>
@@ -1093,6 +1094,7 @@ Text="{Binding IndexingStatusText}"
 
 
                                                     <Border Grid.Row="0"
+        MouseEnter="VideoPreview_MouseEnter"
         Height="{Binding DataContext.VideoFiles.GridPreviewHeight,
                          RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
 Background="{DynamicResource AppSurfaceAlternativeBrush}"
@@ -1149,8 +1151,7 @@ BorderBrush="{DynamicResource AppBorderBrush}"
                                         <DataTemplate>
                                             <Border Padding="6"
         BorderBrush="{DynamicResource AppBorderBrush}"
-                            BorderThickness="0,0,0,1"
-                            ToolTip="{Binding FullPath}">
+                            BorderThickness="0,0,0,1">
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="96"/>
@@ -1161,6 +1162,7 @@ BorderBrush="{DynamicResource AppBorderBrush}"
                                                     </Grid.ColumnDefinitions>
 
                                                     <Border Grid.Column="0"
+        MouseEnter="VideoPreview_MouseEnter"
         Width="88"
         Height="50"
         Margin="0,0,8,0"
@@ -1223,5 +1225,23 @@ BorderBrush="{DynamicResource AppBorderBrush}"
                        Text="{Binding StatusText}"/>
             </Border>
         </Grid>
+
+        <Canvas x:Name="HoverScrubOverlayLayer"
+                Grid.RowSpan="2"
+                Panel.ZIndex="1000"
+                ClipToBounds="True">
+            <Border x:Name="HoverScrubOverlay"
+                    Background="Black"
+                    BorderBrush="{DynamicResource AppBorderBrush}"
+                    BorderThickness="1"
+                    Visibility="Collapsed">
+                <vlc:VideoView x:Name="HoverScrubVideoView">
+                    <Grid x:Name="HoverScrubInputLayer"
+                          Background="#01000000"
+                          MouseMove="HoverScrubInputLayer_MouseMove"
+                          MouseLeave="HoverScrubInputLayer_MouseLeave"/>
+                </vlc:VideoView>
+            </Border>
+        </Canvas>
     </Grid>
 </Window>
