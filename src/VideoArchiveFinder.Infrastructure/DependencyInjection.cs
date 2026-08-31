@@ -63,6 +63,10 @@ public static class DependencyInjection
             BundledFfmpegToolsLocator>();
 
         services.AddSingleton<
+            ILibVlcRuntimeLocator,
+            BundledLibVlcRuntimeLocator>();
+
+        services.AddSingleton<
             IExternalProcessRunner,
             SystemExternalProcessRunner>();
 

@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using LibVLCSharp.Shared;
 using Microsoft.Extensions.Logging;
+using VideoArchiveFinder.Application.ExternalTools;
 using VideoArchiveFinder.Desktop.ViewModels;
 
 namespace VideoArchiveFinder.Desktop;
@@ -18,6 +19,10 @@ public partial class MainWindow
         TimeSpan.FromMilliseconds(180);
 
     private readonly ILogger<MainWindow> _hoverScrubLogger;
+    private readonly ILibVlcRuntimeLocator
+        _libVlcRuntimeLocator;
+
+    private LibVlcRuntimeStatus? _hoverScrubRuntimeStatus;
 
     private DispatcherTimer? _hoverScrubSeekTimer;
     private LibVLC? _hoverScrubLibVlc;
@@ -40,6 +45,14 @@ public partial class MainWindow
 
     private void InitializeHoverScrubbing()
     {
+        _hoverScrubRuntimeStatus =
+            _libVlcRuntimeLocator.Locate();
+
+        if (!_hoverScrubRuntimeStatus.IsReady)
+        {
+            return;
+        }
+
         _hoverScrubSeekTimer = new DispatcherTimer
         {
             Interval = HoverScrubSeekInterval
@@ -54,6 +67,7 @@ public partial class MainWindow
         MouseEventArgs e)
     {
         if (_isHoverScrubDisposed ||
+            _hoverScrubRuntimeStatus?.IsReady != true ||
             sender is not FrameworkElement target ||
             target.DataContext is not
                 VideoFileCardViewModel videoFile ||
@@ -264,7 +278,11 @@ public partial class MainWindow
                 return;
             }
 
-            EnsureHoverScrubPlayerCreated();
+            if (!EnsureHoverScrubPlayerCreated())
+            {
+                StopHoverScrubbing();
+                return;
+            }
 
             if (_hoverScrubLibVlc is null ||
                 _hoverScrubMediaPlayer is null)
@@ -374,14 +392,27 @@ public partial class MainWindow
         }
     }
 
-    private void EnsureHoverScrubPlayerCreated()
+    private bool EnsureHoverScrubPlayerCreated()
     {
         if (_hoverScrubMediaPlayer is not null)
         {
-            return;
+            return true;
         }
 
-        Core.Initialize();
+        var runtimeStatus =
+            _libVlcRuntimeLocator.Locate();
+
+        if (!runtimeStatus.IsReady)
+        {
+            _hoverScrubRuntimeStatus = runtimeStatus;
+            _hoverScrubLogger.LogWarning(
+                "{DiagnosticMessage}",
+                runtimeStatus.DiagnosticMessage);
+            return false;
+        }
+
+        Core.Initialize(
+            runtimeStatus.RuntimeDirectory);
 
         _hoverScrubLibVlc = new LibVLC(
             "--no-audio",
@@ -396,6 +427,8 @@ public partial class MainWindow
 
         HoverScrubVideoView.MediaPlayer =
             _hoverScrubMediaPlayer;
+
+        return true;
     }
 
     private static (

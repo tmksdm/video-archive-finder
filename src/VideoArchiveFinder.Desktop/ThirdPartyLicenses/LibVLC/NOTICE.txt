@@ -1,0 +1,16 @@
+Video Archive Finder distributes the following unmodified VideoLAN packages:
+
+- VideoLAN.LibVLC.Windows 3.0.23.1
+- LibVLCSharp 3.10.1
+- LibVLCSharp.WPF 3.10.1
+
+They are licensed under GNU Lesser General Public License version 2.1 or later.
+The license text is included in LICENSE.txt in this directory.
+
+Upstream projects and corresponding source code:
+https://code.videolan.org/videolan/vlc
+https://code.videolan.org/videolan/libvlc-nuget
+https://code.videolan.org/videolan/LibVLCSharp
+
+The native LibVLC libraries and plugins remain separate files under
+app\libvlc so they can be inspected and replaced in accordance with the LGPL.

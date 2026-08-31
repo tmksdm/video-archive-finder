@@ -23,6 +23,10 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>VideoArchiveFinder</AssemblyName>
 	<Product>Video Archive Finder</Product>
+    <VlcWindowsX64TargetDir>app\libvlc</VlcWindowsX64TargetDir>
+    <VlcWindowsX64Enabled>true</VlcWindowsX64Enabled>
+    <VlcWindowsX86Enabled>false</VlcWindowsX86Enabled>
+    <VlcWindowsArm64Enabled>false</VlcWindowsArm64Enabled>
   </PropertyGroup>
 
 	<ItemGroup>
@@ -49,6 +53,25 @@
 			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
 			<ExcludeFromSingleFile>true</ExcludeFromSingleFile>
 		</Content>
+
+        <Content Include="ThirdPartyLicenses\LibVLC\**\*">
+            <Link>app\licenses\libvlc\%(RecursiveDir)%(Filename)%(Extension)</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+            <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+        </Content>
 	</ItemGroup>
+
+    <Target Name="KeepBundledLibVlcOutsideSingleFile"
+            AfterTargets="CollectVlcFilesToCopyWindows">
+        <ItemGroup>
+            <Content Update="@(Content)">
+                <CopyToPublishDirectory
+                    Condition="$([System.String]::Copy('%(Content.Link)').StartsWith('app\libvlc\'))">PreserveNewest</CopyToPublishDirectory>
+                <ExcludeFromSingleFile
+                    Condition="$([System.String]::Copy('%(Content.Link)').StartsWith('app\libvlc\'))">true</ExcludeFromSingleFile>
+            </Content>
+        </ItemGroup>
+    </Target>
 
 </Project>

@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
 using VideoArchiveFinder.Application.Search;
+using VideoArchiveFinder.Application.ExternalTools;
 using VideoArchiveFinder.Application.Settings;
 using VideoArchiveFinder.Application.Thumbnails;
 using VideoArchiveFinder.Desktop.Services;
@@ -45,6 +46,7 @@ public partial class MainWindow : Window
         IAppThemeService appThemeService,
         IThumbnailCacheService thumbnailCacheService,
         IWindowsShellService windowsShellService,
+        ILibVlcRuntimeLocator libVlcRuntimeLocator,
         Microsoft.Extensions.Logging.ILogger<MainWindow>
             hoverScrubLogger,
         Microsoft.Extensions.Logging.ILogger<
@@ -53,6 +55,7 @@ public partial class MainWindow : Window
         _appThemeService = appThemeService;
         _thumbnailCacheService = thumbnailCacheService;
         _windowsShellService = windowsShellService;
+        _libVlcRuntimeLocator = libVlcRuntimeLocator;
         _hoverScrubLogger = hoverScrubLogger;
         _cacheDialogLogger = cacheDialogLogger;
 

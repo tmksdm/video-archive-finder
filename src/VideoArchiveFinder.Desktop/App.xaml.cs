@@ -86,6 +86,28 @@ public partial class App : System.Windows.Application
                 System.Windows.MessageBoxImage.Warning);
         }
 
+        var libVlcRuntimeLocator =
+            _host.Services.GetRequiredService<
+                ILibVlcRuntimeLocator>();
+
+        var libVlcRuntimeStatus =
+            libVlcRuntimeLocator.Locate();
+
+        if (!libVlcRuntimeStatus.IsReady)
+        {
+            Log.Warning(
+                "LibVLC is unavailable. {DiagnosticMessage}",
+                libVlcRuntimeStatus.DiagnosticMessage);
+
+            System.Windows.MessageBox.Show(
+                libVlcRuntimeStatus.DiagnosticMessage + "\n\n" +
+                "Поиск, список видео и статические миниатюры " +
+                "продолжат работать.",
+                "Hover-просмотр недоступен",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Warning);
+        }
+
 
         var appThemeService =
             _host.Services.GetRequiredService<IAppThemeService>();
