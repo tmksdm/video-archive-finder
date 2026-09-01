@@ -38,6 +38,9 @@ public sealed class FolderIndexingService
     private readonly ILogger<FolderIndexingService>
         _logger;
 
+    private readonly bool
+        _indexVideoFilesDuringFolderScan;
+
     public FolderIndexingService(
         IFolderTreeEnumerator folderTreeEnumerator,
         IFolderIndexRepository folderIndexRepository,
@@ -50,7 +53,8 @@ public sealed class FolderIndexingService
             textNormalizationService,
         ISearchStemService
             searchStemService,
-        ILogger<FolderIndexingService> logger)
+        ILogger<FolderIndexingService> logger,
+        bool indexVideoFilesDuringFolderScan = false)
 
 
     {
@@ -79,6 +83,9 @@ public sealed class FolderIndexingService
             searchStemService;
 
         _logger = logger;
+
+        _indexVideoFilesDuringFolderScan =
+            indexVideoFilesDuringFolderScan;
     }
 
     public Task<FolderIndexingResult> ScanAsync(
@@ -167,12 +174,16 @@ public sealed class FolderIndexingService
                 discoveredFolderCount++;
 
                 var videoIndexingResult =
-                    await IndexVideoFilesAsync(
-                            folder,
-                            source.Id,
-                            startedAtUtc,
-                            cancellationToken)
-                        .ConfigureAwait(false);
+                    _indexVideoFilesDuringFolderScan
+                        ? await IndexVideoFilesAsync(
+                                folder,
+                                source.Id,
+                                startedAtUtc,
+                                cancellationToken)
+                            .ConfigureAwait(false)
+                        : (
+                            FileCount: 0,
+                            ErrorCount: 0);
 
                 errorCount +=
                     videoIndexingResult.ErrorCount;

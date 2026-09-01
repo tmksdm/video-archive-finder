@@ -18,6 +18,41 @@ using var dataDirectoryProvider =
 
 try
 {
+    if (args.Length == 2 &&
+        string.Equals(
+            args[0],
+            "--archive",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        var archiveRunner =
+            new ArchiveIndexBenchmarkRunner(
+                dataDirectoryProvider);
+
+        await archiveRunner.RunAsync(
+            args[1],
+            cancellationTokenSource.Token);
+
+        Console.WriteLine(
+            "Измерение завершено успешно.");
+
+        return 0;
+    }
+
+    if (args.Length != 0)
+    {
+        Console.Error.WriteLine(
+            "Использование:");
+
+        Console.Error.WriteLine(
+            "  VideoArchiveFinder.SearchBenchmark");
+
+        Console.Error.WriteLine(
+            "  VideoArchiveFinder.SearchBenchmark " +
+            "--archive <путь>");
+
+        return 64;
+    }
+
     var runner =
         new SearchBenchmarkRunner(
             dataDirectoryProvider);

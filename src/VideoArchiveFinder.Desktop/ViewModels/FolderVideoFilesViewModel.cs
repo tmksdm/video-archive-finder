@@ -15,8 +15,8 @@ namespace VideoArchiveFinder.Desktop.ViewModels;
 public partial class FolderVideoFilesViewModel
     : ObservableObject, IDisposable
 {
-    private readonly IVideoFileIndexRepository
-        _videoFileIndexRepository;
+    private readonly IVideoFolderRefreshService
+        _videoFolderRefreshService;
 
     private readonly IFolderIndexRepository
         _folderIndexRepository;
@@ -71,7 +71,7 @@ public partial class FolderVideoFilesViewModel
 
 
     public FolderVideoFilesViewModel(
-        IVideoFileIndexRepository videoFileIndexRepository,
+        IVideoFolderRefreshService videoFolderRefreshService,
         IFolderIndexRepository folderIndexRepository,
         IThumbnailImageLoader thumbnailImageLoader,
         IStaticThumbnailGenerationQueue
@@ -85,8 +85,8 @@ public partial class FolderVideoFilesViewModel
         ILogger<FolderVideoFilesViewModel> logger)
 
     {
-        _videoFileIndexRepository =
-            videoFileIndexRepository;
+        _videoFolderRefreshService =
+            videoFolderRefreshService;
 
         _folderIndexRepository =
             folderIndexRepository;
@@ -258,8 +258,8 @@ public partial class FolderVideoFilesViewModel
 
         try
         {
-            var filesTask = _videoFileIndexRepository
-                .GetByFolderPathAsync(
+            var filesTask = _videoFolderRefreshService
+                .RefreshAsync(
                     folder.RootSourceId,
                     folder.FullPath,
                     currentCancellation.Token);
@@ -273,7 +273,8 @@ public partial class FolderVideoFilesViewModel
                 filesTask,
                 childFoldersTask);
 
-            var files = await filesTask;
+            var refreshResult = await filesTask;
+            var files = refreshResult.Files;
             var childFolders = await childFoldersTask;
 
             if (version != _loadVersion)
@@ -366,7 +367,11 @@ public partial class FolderVideoFilesViewModel
 
             StatusText =
                 $"Видеофайлов: {files.Count}; " +
-                $"вложенных папок: {childFolders.Count}";
+                $"вложенных папок: {childFolders.Count}" +
+                (refreshResult.ErrorCount > 0
+                    ? $"; ошибок чтения: " +
+                      $"{refreshResult.ErrorCount}"
+                    : string.Empty);
         }
         catch (OperationCanceledException)
             when (currentCancellation.IsCancellationRequested)

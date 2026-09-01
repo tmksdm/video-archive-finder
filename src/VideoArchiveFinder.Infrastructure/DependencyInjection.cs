@@ -134,6 +134,10 @@ public static class DependencyInjection
             VideoFileDiscoveryService>();
 
         services.AddSingleton<
+            IVideoFolderRefreshService,
+            VideoFolderRefreshService>();
+
+        services.AddSingleton<
             IVideoFileSystem,
             SystemVideoFileSystem>();
 

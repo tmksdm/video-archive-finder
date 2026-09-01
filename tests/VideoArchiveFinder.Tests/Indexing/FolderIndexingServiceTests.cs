@@ -349,6 +349,75 @@ public sealed class FolderIndexingServiceTests
     }
 
     [Fact]
+    public async Task ScanAsync_WhenVideoIndexingIsDisabled_SkipsFiles()
+    {
+        var source =
+            ArchiveSource.Create(@"C:\Archive");
+
+        var folderPath =
+            @"C:\Archive\Видео";
+
+        var discoveryService =
+            new TestVideoFileDiscoveryService(
+                new VideoFileDiscoveryResult(
+                    Files:
+                    [
+                        new DiscoveredVideoFile(
+                            FullPath:
+                                folderPath + @"\Клип.mp4",
+                            Name: "Клип.mp4",
+                            Extension: ".mp4",
+                            SizeBytes: 1_000,
+                            LastWriteTimeUtc:
+                                DateTimeOffset.UtcNow)
+                    ],
+                    ErrorCount: 0,
+                    CanRemoveStaleEntries: true));
+
+        var folderRepository =
+            new RecordingFolderIndexRepository();
+
+        var videoRepository =
+            new RecordingVideoFileIndexRepository();
+
+        var service =
+            CreateService(
+                new TestFolderTreeEnumerator(
+                [
+                    new DiscoveredFolder(
+                        FullPath: folderPath,
+                        Name: "Видео",
+                        ParentFullPath: @"C:\Archive",
+                        DirectSubfolderCount: 0,
+                        IsAvailable: true,
+                        IsReparsePoint: false)
+                ]),
+                folderRepository,
+                videoFileDiscoveryService:
+                    discoveryService,
+                videoFileIndexRepository:
+                    videoRepository,
+                indexVideoFilesDuringFolderScan: false);
+
+        await service.ScanAsync(source);
+
+        Assert.Empty(
+            discoveryService.RequestedFolderPaths);
+
+        Assert.Empty(videoRepository.Batches);
+        Assert.Empty(videoRepository.Completions);
+
+        var indexedFolder =
+            Assert.Single(
+                Assert.Single(
+                    folderRepository.Batches));
+
+        Assert.Equal(
+            0,
+            indexedFolder.DirectVideoFileCount);
+    }
+
+    [Fact]
     public async Task ScanAsync_WhenVideoDiscoveryIsIncomplete_DoesNotRemoveStaleFiles()
     {
         var source =
@@ -705,7 +774,8 @@ public sealed class FolderIndexingServiceTests
         IVideoFileIndexRepository?
             videoFileIndexRepository = null,
         IVideoFileAnalysisQueue?
-            videoFileAnalysisQueue = null)
+            videoFileAnalysisQueue = null,
+        bool indexVideoFilesDuringFolderScan = true)
 
     {
         return new FolderIndexingService(
@@ -721,7 +791,8 @@ public sealed class FolderIndexingServiceTests
                 new RecordingFolderIndexingStateRepository(),
             new TextNormalizationService(),
             new RussianSearchStemService(),
-            NullLogger<FolderIndexingService>.Instance);
+            NullLogger<FolderIndexingService>.Instance,
+            indexVideoFilesDuringFolderScan);
 
     }
 
