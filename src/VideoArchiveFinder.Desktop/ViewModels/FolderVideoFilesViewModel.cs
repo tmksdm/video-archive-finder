@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using VideoArchiveFinder.Application.Indexing;
 using VideoArchiveFinder.Application.Search;
 using VideoArchiveFinder.Application.VideoFiles;
 using VideoArchiveFinder.Application.Settings;
@@ -16,6 +17,9 @@ public partial class FolderVideoFilesViewModel
 {
     private readonly IVideoFileIndexRepository
         _videoFileIndexRepository;
+
+    private readonly IFolderIndexRepository
+        _folderIndexRepository;
 
     private readonly IThumbnailImageLoader
         _thumbnailImageLoader;
@@ -68,6 +72,7 @@ public partial class FolderVideoFilesViewModel
 
     public FolderVideoFilesViewModel(
         IVideoFileIndexRepository videoFileIndexRepository,
+        IFolderIndexRepository folderIndexRepository,
         IThumbnailImageLoader thumbnailImageLoader,
         IStaticThumbnailGenerationQueue
             thumbnailGenerationQueue,
@@ -82,6 +87,9 @@ public partial class FolderVideoFilesViewModel
     {
         _videoFileIndexRepository =
             videoFileIndexRepository;
+
+        _folderIndexRepository =
+            folderIndexRepository;
 
         _thumbnailImageLoader =
             thumbnailImageLoader;
@@ -181,7 +189,13 @@ public partial class FolderVideoFilesViewModel
         get;
     } = [];
 
+    public ObservableCollection<FolderSearchTreeNode> ChildFolders
+    {
+        get;
+    } = [];
+
     public bool HasFiles => Files.Count > 0;
+    public bool HasChildFolders => ChildFolders.Count > 0;
     public bool IsListView => !IsGridView;
 
 
@@ -212,7 +226,9 @@ public partial class FolderVideoFilesViewModel
 
         SelectedFolder = folder;
         Files.Clear();
+        ChildFolders.Clear();
         OnPropertyChanged(nameof(HasFiles));
+        OnPropertyChanged(nameof(HasChildFolders));
 
         if (folder is null)
         {
@@ -238,16 +254,27 @@ public partial class FolderVideoFilesViewModel
         }
 
         IsLoading = true;
-        StatusText = "Загрузка видеофайлов...";
+        StatusText = "Загрузка содержимого папки...";
 
         try
         {
-            var files =
-                await _videoFileIndexRepository
-                    .GetByFolderPathAsync(
-                        folder.RootSourceId,
-                        folder.FullPath,
-                        currentCancellation.Token);
+            var filesTask = _videoFileIndexRepository
+                .GetByFolderPathAsync(
+                    folder.RootSourceId,
+                    folder.FullPath,
+                    currentCancellation.Token);
+
+            var childFoldersTask = _folderIndexRepository
+                .GetChildrenAsync(
+                    folder.Id,
+                    currentCancellation.Token);
+
+            await Task.WhenAll(
+                filesTask,
+                childFoldersTask);
+
+            var files = await filesTask;
+            var childFolders = await childFoldersTask;
 
             if (version != _loadVersion)
             {
@@ -259,6 +286,31 @@ public partial class FolderVideoFilesViewModel
 
             var cardsToAnalyze =
                 new List<VideoFileCardViewModel>();
+
+            foreach (var childFolder in childFolders)
+            {
+                ChildFolders.Add(
+                    new FolderSearchTreeNode(
+                        Id: childFolder.Id,
+                        FullPath: childFolder.FullPath,
+                        Name: childFolder.Name,
+                        RootSourceId:
+                            childFolder.RootSourceId,
+                        IsAvailable:
+                            childFolder.IsAvailable,
+                        IsMatch: false,
+                        NameSegments:
+                        [
+                            new FolderNameTextSegment(
+                                childFolder.Name,
+                                IsHighlighted: false)
+                        ],
+                        Children: [],
+                        DirectSubfolderCount:
+                            childFolder.DirectSubfolderCount,
+                        DirectVideoFileCount:
+                            childFolder.DirectVideoFileCount));
+            }
 
             foreach (var file in files)
             {
@@ -310,10 +362,11 @@ public partial class FolderVideoFilesViewModel
 
 
             OnPropertyChanged(nameof(HasFiles));
+            OnPropertyChanged(nameof(HasChildFolders));
 
-            StatusText = files.Count == 0
-                ? "В выбранной папке нет проиндексированных видеофайлов"
-                : $"Найдено видеофайлов: {files.Count}";
+            StatusText =
+                $"Видеофайлов: {files.Count}; " +
+                $"вложенных папок: {childFolders.Count}";
         }
         catch (OperationCanceledException)
             when (currentCancellation.IsCancellationRequested)
@@ -328,10 +381,12 @@ public partial class FolderVideoFilesViewModel
             }
 
             Files.Clear();
+            ChildFolders.Clear();
             OnPropertyChanged(nameof(HasFiles));
+            OnPropertyChanged(nameof(HasChildFolders));
 
             StatusText =
-                "Не удалось загрузить видеофайлы";
+                "Не удалось загрузить содержимое папки";
 
             _logger.LogError(
                 exception,

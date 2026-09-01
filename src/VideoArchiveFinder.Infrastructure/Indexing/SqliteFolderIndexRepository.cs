@@ -433,6 +433,92 @@ public sealed class SqliteFolderIndexRepository
         }
     }
 
+    public async Task<IReadOnlyList<IndexedFolder>>
+        GetChildrenAsync(
+            long parentFolderId,
+            CancellationToken cancellationToken = default)
+    {
+        if (parentFolderId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(parentFolderId));
+        }
+
+        try
+        {
+            await using var connection = CreateConnection();
+
+            await connection
+                .OpenAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            await ConfigureConnectionAsync(
+                    connection,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            await using var command = connection.CreateCommand();
+
+            command.CommandText =
+                """
+                SELECT
+                    Id,
+                    FullPath,
+                    Name,
+                    NormalizedName,
+                    SearchTokens,
+                    SearchStems,
+                    ParentFolderId,
+                    RootSourceId,
+                    IsAvailable,
+                    LastSeenUtc,
+                    DirectSubfolderCount,
+                    DirectVideoFileCount
+                FROM Folders
+                WHERE ParentFolderId = $parentFolderId
+                ORDER BY Name COLLATE NOCASE, Id;
+                """;
+
+            command.Parameters.AddWithValue(
+                "$parentFolderId",
+                parentFolderId);
+
+            await using var reader = await command
+                .ExecuteReaderAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            var folders = new List<IndexedFolder>();
+
+            while (await reader
+                .ReadAsync(cancellationToken)
+                .ConfigureAwait(false))
+            {
+                folders.Add(ReadFolder(reader));
+            }
+
+            return folders;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation(
+                "Reading child folders for parent {ParentFolderId} " +
+                "was cancelled.",
+                parentFolderId);
+
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                exception,
+                "Failed to read child folders for parent " +
+                "{ParentFolderId}.",
+                parentFolderId);
+
+            throw;
+        }
+    }
+
     private static async Task UpsertFoldersAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,

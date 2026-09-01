@@ -15,4 +15,8 @@ public interface IFolderIndexRepository
     Task<IReadOnlyList<IndexedFolder>> GetByRootSourceIdAsync(
         Guid rootSourceId,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<IndexedFolder>> GetChildrenAsync(
+        long parentFolderId,
+        CancellationToken cancellationToken = default);
 }

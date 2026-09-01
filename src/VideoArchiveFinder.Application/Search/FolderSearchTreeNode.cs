@@ -8,4 +8,6 @@ public sealed record FolderSearchTreeNode(
     bool IsAvailable,
     bool IsMatch,
     IReadOnlyList<FolderNameTextSegment> NameSegments,
-    IReadOnlyList<FolderSearchTreeNode> Children);
+    IReadOnlyList<FolderSearchTreeNode> Children,
+    int DirectSubfolderCount = 0,
+    int DirectVideoFileCount = 0);

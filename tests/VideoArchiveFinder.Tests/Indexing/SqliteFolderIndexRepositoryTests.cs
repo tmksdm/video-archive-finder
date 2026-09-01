@@ -94,6 +94,50 @@ public sealed class SqliteFolderIndexRepositoryTests
     }
 
     [Fact]
+    public async Task GetChildrenAsync_ReturnsOnlyDirectChildrenInNameOrder()
+    {
+        var repository = await CreateRepositoryAsync();
+        var sourceId = Guid.NewGuid();
+
+        await repository.UpsertBatchAsync(
+        [
+            CreateFolder(
+                @"C:\Archive",
+                "Archive",
+                sourceId),
+            CreateFolder(
+                @"C:\Archive\Телефон",
+                "Телефон",
+                sourceId,
+                parentFullPath: @"C:\Archive",
+                directVideoFileCount: 50),
+            CreateFolder(
+                @"C:\Archive\Звук",
+                "Звук",
+                sourceId,
+                parentFullPath: @"C:\Archive",
+                directSubfolderCount: 1),
+            CreateFolder(
+                @"C:\Archive\Телефон\Камера",
+                "Камера",
+                sourceId,
+                parentFullPath: @"C:\Archive\Телефон")
+        ]);
+
+        var parent = Assert.Single(
+            await repository.GetByRootSourceIdAsync(sourceId),
+            folder => folder.FullPath == @"C:\Archive");
+
+        var children = await repository.GetChildrenAsync(
+            parent.Id);
+
+        Assert.Equal(2, children.Count);
+        Assert.Equal("Звук", children[0].Name);
+        Assert.Equal("Телефон", children[1].Name);
+        Assert.Equal(50, children[1].DirectVideoFileCount);
+    }
+
+    [Fact]
     public async Task UpsertBatchAsync_WhenFolderExists_UpdatesIt()
     {
         var repository = await CreateRepositoryAsync();

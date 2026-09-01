@@ -827,6 +827,15 @@ public sealed class FolderIndexingServiceTests
             return Task.FromResult<
                 IReadOnlyList<IndexedFolder>>([]);
         }
+
+        public Task<IReadOnlyList<IndexedFolder>>
+            GetChildrenAsync(
+                long parentFolderId,
+                CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<
+                IReadOnlyList<IndexedFolder>>([]);
+        }
     }
 
     private sealed record ScanCompletion(

@@ -16,7 +16,9 @@ ResizeMode="CanResize"
 UseLayoutRounding="True"
 SnapsToDevicePixels="True"
 StateChanged="MainWindow_StateChanged"
-        PreviewKeyDown="MainWindow_PreviewKeyDown">
+        PreviewKeyDown="MainWindow_PreviewKeyDown"
+        PreviewMouseMove="DragSource_PreviewMouseMove"
+        PreviewMouseLeftButtonUp="MainWindow_PreviewMouseLeftButtonUp">
 
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="32"
@@ -917,6 +919,7 @@ Text="{Binding IndexingStatusText}"
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
 
@@ -1041,11 +1044,72 @@ Text="{Binding IndexingStatusText}"
                    Foreground="{DynamicResource AppSecondaryTextBrush}"
                    Text="{Binding VideoFiles.StatusText}"/>
 
+                                <ScrollViewer Grid.Row="3"
+                                              MaxHeight="170"
+                                              Margin="0,0,0,8"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              VerticalScrollBarVisibility="Auto"
+                                              Visibility="{Binding VideoFiles.HasChildFolders,
+                                                  Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <ItemsControl ItemsSource="{Binding VideoFiles.ChildFolders}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel Orientation="Horizontal"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Width="230"
+                                                        MinHeight="64"
+                                                        Margin="4"
+                                                        Padding="10,8"
+                                                        Background="{DynamicResource AppSurfaceAlternativeBrush}"
+                                                        BorderBrush="{DynamicResource AppBorderBrush}"
+                                                        BorderThickness="1"
+                                                        Cursor="Hand"
+                                                        PreviewMouseLeftButtonDown="FolderSearchNode_PreviewMouseLeftButtonDown"
+                                                        ToolTip="{Binding FullPath}">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <materialDesign:PackIcon Grid.Column="0"
+                                                                                 Width="30"
+                                                                                 Height="30"
+                                                                                 Margin="0,0,10,0"
+                                                                                 VerticalAlignment="Center"
+                                                                                 Foreground="{DynamicResource AppSelectionAccentBrush}"
+                                                                                 Kind="FolderOutline"/>
+                                                        <StackPanel Grid.Column="1"
+                                                                    VerticalAlignment="Center">
+                                                            <TextBlock FontWeight="SemiBold"
+                                                                       Text="{Binding Name}"
+                                                                       TextTrimming="CharacterEllipsis"/>
+                                                            <StackPanel Margin="0,4,0,0"
+                                                                        Orientation="Horizontal">
+                                                                <TextBlock Foreground="{DynamicResource AppSecondaryTextBrush}"
+                                                                           Text="{Binding DirectVideoFileCount,
+                                                                               StringFormat={}{0} видео}"/>
+                                                                <TextBlock Margin="10,0,0,0"
+                                                                           Foreground="{DynamicResource AppSecondaryTextBrush}"
+                                                                           Text="{Binding DirectSubfolderCount,
+                                                                               StringFormat={}{0} папок}"/>
+                                                            </StackPanel>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+
                                 <ListBox x:Name="VideoFilesGrid"
-         Grid.Row="3"
+         Grid.Row="4"
          ItemsSource="{Binding VideoFiles.Files}"
          SelectionMode="Extended"
          SelectionChanged="VideoFiles_SelectionChanged"
+         PreviewMouseLeftButtonDown="VideoFiles_PreviewMouseLeftButtonDown"
          PreviewKeyDown="VideoFiles_PreviewKeyDown"
          Visibility="{Binding VideoFiles.IsGridView,
                               Converter={StaticResource BooleanToVisibilityConverter}}"
@@ -1082,9 +1146,29 @@ Text="{Binding IndexingStatusText}"
 
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Background="{DynamicResource AppSurfaceBrush}"
-                    BorderBrush="{DynamicResource AppBorderBrush}"
-                    BorderThickness="1">
+                                            <Border>
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background"
+                                                                Value="{DynamicResource AppSurfaceBrush}"/>
+                                                        <Setter Property="BorderBrush"
+                                                                Value="{DynamicResource AppBorderBrush}"/>
+                                                        <Setter Property="BorderThickness"
+                                                                Value="1"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsSelected,
+                                                                RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}}}"
+                                                                         Value="True">
+                                                                <Setter Property="Background"
+                                                                        Value="{DynamicResource AppSelectionBrush}"/>
+                                                                <Setter Property="BorderBrush"
+                                                                        Value="{DynamicResource AppSelectionAccentBrush}"/>
+                                                                <Setter Property="BorderThickness"
+                                                                        Value="3"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
                                                 <Grid>
                                                     <Grid.RowDefinitions>
                                                         <RowDefinition Height="Auto"/>
@@ -1124,6 +1208,37 @@ BorderBrush="{DynamicResource AppBorderBrush}"
          после подключения FFprobe на этапе 5. -->
                                                     </Grid>
 
+                                                    <Border Grid.Row="0"
+                                                            Panel.ZIndex="5"
+                                                            Width="28"
+                                                            Height="28"
+                                                            Margin="6"
+                                                            HorizontalAlignment="Right"
+                                                            VerticalAlignment="Top"
+                                                            Background="{DynamicResource AppSelectionAccentBrush}"
+                                                            CornerRadius="14">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Visibility"
+                                                                        Value="Collapsed"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsSelected,
+                                                                        RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}}}"
+                                                                                 Value="True">
+                                                                        <Setter Property="Visibility"
+                                                                                Value="Visible"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                        <materialDesign:PackIcon Width="17"
+                                                                                 Height="17"
+                                                                                 HorizontalAlignment="Center"
+                                                                                 VerticalAlignment="Center"
+                                                                                 Foreground="White"
+                                                                                 Kind="CheckBold"/>
+                                                    </Border>
+
                                                 </Grid>
                                             </Border>
                                         </DataTemplate>
@@ -1132,10 +1247,11 @@ BorderBrush="{DynamicResource AppBorderBrush}"
 
 
                                 <ListBox x:Name="VideoFilesList"
-         Grid.Row="3"
+         Grid.Row="4"
          ItemsSource="{Binding VideoFiles.Files}"
          SelectionMode="Extended"
          SelectionChanged="VideoFiles_SelectionChanged"
+         PreviewMouseLeftButtonDown="VideoFiles_PreviewMouseLeftButtonDown"
          PreviewKeyDown="VideoFiles_PreviewKeyDown"
          Visibility="{Binding VideoFiles.IsListView,
                      Converter={StaticResource BooleanToVisibilityConverter}}"
@@ -1149,9 +1265,29 @@ BorderBrush="{DynamicResource AppBorderBrush}"
                  VirtualizingPanel.VirtualizationMode="Recycling">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Padding="6"
-        BorderBrush="{DynamicResource AppBorderBrush}"
-                            BorderThickness="0,0,0,1">
+                                            <Border Padding="6">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background"
+                                                                Value="Transparent"/>
+                                                        <Setter Property="BorderBrush"
+                                                                Value="{DynamicResource AppBorderBrush}"/>
+                                                        <Setter Property="BorderThickness"
+                                                                Value="0,0,0,1"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsSelected,
+                                                                RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}}}"
+                                                                         Value="True">
+                                                                <Setter Property="Background"
+                                                                        Value="{DynamicResource AppSelectionBrush}"/>
+                                                                <Setter Property="BorderBrush"
+                                                                        Value="{DynamicResource AppSelectionAccentBrush}"/>
+                                                                <Setter Property="BorderThickness"
+                                                                        Value="4,1,1,1"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="96"/>
@@ -1207,6 +1343,18 @@ BorderBrush="{DynamicResource AppBorderBrush}"
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                 </ListBox>
+
+                                <Canvas x:Name="VideoAreaSelectionOverlay"
+                                        Grid.Row="4"
+                                        Panel.ZIndex="20"
+                                        IsHitTestVisible="False"
+                                        ClipToBounds="True">
+                                    <Border x:Name="VideoAreaSelectionRectangle"
+                                            Background="#334F8FD8"
+                                            BorderBrush="{DynamicResource AppSelectionAccentBrush}"
+                                            BorderThickness="1"
+                                            Visibility="Collapsed"/>
+                                </Canvas>
                             </Grid>
                         </Border>
 
@@ -1238,6 +1386,7 @@ BorderBrush="{DynamicResource AppBorderBrush}"
                 <vlc:VideoView x:Name="HoverScrubVideoView">
                     <Grid x:Name="HoverScrubInputLayer"
                           Background="#01000000"
+                          PreviewMouseLeftButtonDown="HoverScrubInputLayer_PreviewMouseLeftButtonDown"
                           MouseMove="HoverScrubInputLayer_MouseMove"
                           MouseLeave="HoverScrubInputLayer_MouseLeave"/>
                 </vlc:VideoView>

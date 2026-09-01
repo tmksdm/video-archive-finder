@@ -181,6 +181,10 @@ public sealed class FolderSearchTreeBuilder
             IsAvailable: folder.IsAvailable,
             IsMatch: isMatch,
             NameSegments: nameSegments,
-            Children: children);
+            Children: children,
+            DirectSubfolderCount:
+                folder.DirectSubfolderCount,
+            DirectVideoFileCount:
+                folder.DirectVideoFileCount);
     }
 }
