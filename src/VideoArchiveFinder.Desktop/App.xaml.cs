@@ -7,6 +7,7 @@ using VideoArchiveFinder.Infrastructure;
 using VideoArchiveFinder.Desktop.Services;
 using VideoArchiveFinder.Application.Indexing;
 using VideoArchiveFinder.Application.ExternalTools;
+using VideoArchiveFinder.Application.Thumbnails;
 
 
 namespace VideoArchiveFinder.Desktop;
@@ -14,6 +15,9 @@ namespace VideoArchiveFinder.Desktop;
 public partial class App : System.Windows.Application
 {
     private IHost? _host;
+    private CancellationTokenSource?
+        _cacheMaintenanceCancellation;
+    private Task? _cacheMaintenanceTask;
 
     protected override async void OnStartup(System.Windows.StartupEventArgs e)
     {
@@ -120,6 +124,10 @@ public partial class App : System.Windows.Application
 
         await indexDatabaseInitializer.InitializeAsync();
 
+        var cacheMaintenanceService =
+            _host.Services.GetRequiredService<
+                IThumbnailCacheMaintenanceService>();
+
         var viewModel =
             _host.Services.GetRequiredService<MainWindowViewModel>();
 
@@ -133,6 +141,12 @@ public partial class App : System.Windows.Application
         MainWindow = mainWindow;
         mainWindow.Show();
 
+        _cacheMaintenanceCancellation = new();
+        _cacheMaintenanceTask =
+            RunCacheMaintenanceAsync(
+                cacheMaintenanceService,
+                _cacheMaintenanceCancellation.Token);
+
 
         Log.Information("Video Archive Finder started");
     }
@@ -143,6 +157,19 @@ public partial class App : System.Windows.Application
 
         if (_host is not null)
         {
+            if (_cacheMaintenanceCancellation is not null)
+            {
+                await _cacheMaintenanceCancellation
+                    .CancelAsync();
+            }
+
+            if (_cacheMaintenanceTask is not null)
+            {
+                await _cacheMaintenanceTask;
+            }
+
+            _cacheMaintenanceCancellation?.Dispose();
+
             var viewModel =
                 _host.Services.GetService<MainWindowViewModel>();
 
@@ -158,6 +185,30 @@ public partial class App : System.Windows.Application
 
         await Log.CloseAndFlushAsync();
         base.OnExit(e);
+    }
+
+    private static async Task RunCacheMaintenanceAsync(
+        IThumbnailCacheMaintenanceService
+            cacheMaintenanceService,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await cacheMaintenanceService
+                .TrimAsync(
+                    cancellationToken: cancellationToken);
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            // Application shutdown is expected.
+        }
+        catch (Exception exception)
+        {
+            Log.Warning(
+                exception,
+                "Startup thumbnail cache maintenance failed.");
+        }
     }
 }
 

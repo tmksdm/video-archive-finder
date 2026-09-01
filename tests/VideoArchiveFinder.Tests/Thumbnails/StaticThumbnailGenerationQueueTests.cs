@@ -337,6 +337,35 @@ public sealed class StaticThumbnailGenerationQueueTests
             .WaitAsync(TimeSpan.FromSeconds(5));
     }
 
+    [Fact]
+    public async Task Queue_GeneratedThumbnail_TriggersCacheMaintenance()
+    {
+        var maintenanceService =
+            new RecordingThumbnailCacheMaintenanceService();
+
+        await using var queue =
+            new StaticThumbnailGenerationQueue(
+                new TestStaticThumbnailGenerator(
+                    (_, _) => Task.FromResult(
+                        SuccessfulResult())),
+                new RecordingVideoFileIndexRepository(),
+                NullLogger<
+                    StaticThumbnailGenerationQueue>.Instance,
+                maximumParallelism: 1,
+                capacity: 1,
+                cacheMaintenanceService:
+                    maintenanceService);
+
+        await queue.EnqueueAsync(CreateRequest(1));
+        await queue.WaitForIdleAsync()
+            .WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(1, maintenanceService.TrimCallCount);
+        Assert.Equal(
+            @"C:\Cache\thumbnail.jpg",
+            maintenanceService.ProtectedFilePath);
+    }
+
     private static StaticThumbnailRequest CreateRequest(
         int index)
     {
@@ -429,6 +458,36 @@ public sealed class StaticThumbnailGenerationQueueTests
             return _generate(
                 request,
                 cancellationToken);
+        }
+    }
+
+    private sealed class RecordingThumbnailCacheMaintenanceService
+        : IThumbnailCacheMaintenanceService
+    {
+        public int TrimCallCount { get; private set; }
+
+        public string? ProtectedFilePath { get; private set; }
+
+        public long? GetMaximumSizeBytes(
+            long currentCacheSizeBytes)
+        {
+            return 1_000_000;
+        }
+
+        public Task<ThumbnailCacheTrimResult> TrimAsync(
+            string? protectedFilePath = null,
+            CancellationToken cancellationToken = default)
+        {
+            TrimCallCount++;
+            ProtectedFilePath = protectedFilePath;
+
+            return Task.FromResult(
+                new ThumbnailCacheTrimResult(
+                    1_000_000,
+                    0,
+                    0,
+                    0,
+                    0));
         }
     }
 }

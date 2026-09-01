@@ -75,6 +75,8 @@ public sealed class StaticThumbnailGenerator
 
             if (IsUsableFile(thumbnailPath))
             {
+                TouchCacheFile(thumbnailPath);
+
                 return CreateResult(
                     StaticThumbnailGenerationStatus.CacheHit,
                     thumbnailPath,
@@ -304,6 +306,27 @@ public sealed class StaticThumbnailGenerator
                 filePath);
 
             return false;
+        }
+    }
+
+    private void TouchCacheFile(
+        string filePath)
+    {
+        try
+        {
+            File.SetLastWriteTimeUtc(
+                filePath,
+                DateTime.UtcNow);
+        }
+        catch (Exception exception)
+            when (exception is IOException or
+                UnauthorizedAccessException)
+        {
+            _logger.LogDebug(
+                exception,
+                "Could not update thumbnail cache usage " +
+                "time for {ThumbnailPath}.",
+                filePath);
         }
     }
 

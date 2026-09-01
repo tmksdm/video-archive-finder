@@ -85,6 +85,85 @@ public sealed class
             reader.IsDBNull(1));
     }
 
+    [Fact]
+    public async Task ResetPathsAsync_ClearsOnlyMatchingThumbnailState()
+    {
+        var pathProvider =
+            await CreateDatabaseAsync();
+
+        const string removedThumbnailPath =
+            @"C:\Cache\removed.jpg";
+
+        await InsertVideoFileAsync(
+            pathProvider,
+            fullPath: @"C:\Archive\removed.mp4",
+            thumbnailState:
+                VideoFileThumbnailState.Succeeded,
+            thumbnailPath: removedThumbnailPath);
+
+        await InsertVideoFileAsync(
+            pathProvider,
+            fullPath: @"C:\Archive\kept.mp4",
+            thumbnailState:
+                VideoFileThumbnailState.Succeeded,
+            thumbnailPath:
+                @"C:\Cache\kept.jpg");
+
+        var repository =
+            new SqliteThumbnailCacheStateRepository(
+                pathProvider,
+                NullLogger<
+                    SqliteThumbnailCacheStateRepository>
+                    .Instance);
+
+        var updatedCount =
+            await repository.ResetPathsAsync(
+                [removedThumbnailPath]);
+
+        Assert.Equal(1, updatedCount);
+
+        await using var connection =
+            CreateConnection(pathProvider);
+
+        await connection.OpenAsync();
+
+        await using var command =
+            connection.CreateCommand();
+
+        command.CommandText =
+            """
+            SELECT
+                FullPath,
+                ThumbnailState,
+                ThumbnailPath
+            FROM VideoFiles
+            ORDER BY FullPath;
+            """;
+
+        await using var reader =
+            await command.ExecuteReaderAsync();
+
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(
+            @"C:\Archive\kept.mp4",
+            reader.GetString(0));
+        Assert.Equal(
+            (int)VideoFileThumbnailState.Succeeded,
+            reader.GetInt32(1));
+        Assert.Equal(
+            @"C:\Cache\kept.jpg",
+            reader.GetString(2));
+
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(
+            @"C:\Archive\removed.mp4",
+            reader.GetString(0));
+        Assert.Equal(
+            (int)VideoFileThumbnailState.NotGenerated,
+            reader.GetInt32(1));
+        Assert.True(reader.IsDBNull(2));
+    }
+
     private async Task<IndexDatabasePathProvider>
         CreateDatabaseAsync()
     {

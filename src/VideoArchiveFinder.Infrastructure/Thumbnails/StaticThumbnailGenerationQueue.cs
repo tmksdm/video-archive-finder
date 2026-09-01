@@ -23,6 +23,9 @@ public sealed class StaticThumbnailGenerationQueue
     private readonly ILogger<StaticThumbnailGenerationQueue>
         _logger;
 
+    private readonly IThumbnailCacheMaintenanceService?
+        _cacheMaintenanceService;
+
     private readonly CancellationTokenSource
         _stoppingTokenSource = new();
 
@@ -46,7 +49,9 @@ public sealed class StaticThumbnailGenerationQueue
         IVideoFileIndexRepository videoFileIndexRepository,
         ILogger<StaticThumbnailGenerationQueue> logger,
         int maximumParallelism = 2,
-        int capacity = 128)
+        int capacity = 128,
+        IThumbnailCacheMaintenanceService?
+            cacheMaintenanceService = null)
     {
         ArgumentNullException.ThrowIfNull(
             thumbnailGenerator);
@@ -74,6 +79,8 @@ public sealed class StaticThumbnailGenerationQueue
         _videoFileIndexRepository =
             videoFileIndexRepository;
         _logger = logger;
+        _cacheMaintenanceService =
+            cacheMaintenanceService;
 
         _channel =
             Channel.CreateBounded<StaticThumbnailRequest>(
@@ -379,6 +386,18 @@ public sealed class StaticThumbnailGenerationQueue
                 VideoFileThumbnailState.Succeeded,
                 result.ThumbnailPath,
                 stoppingToken);
+
+            if (result.Status ==
+                    StaticThumbnailGenerationStatus.Generated &&
+                _cacheMaintenanceService is not null)
+            {
+                await _cacheMaintenanceService
+                    .TrimAsync(
+                        protectedFilePath:
+                            result.ThumbnailPath,
+                        cancellationToken:
+                            stoppingToken);
+            }
 
             return;
         }

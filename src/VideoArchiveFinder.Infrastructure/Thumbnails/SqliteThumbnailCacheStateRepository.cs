@@ -24,6 +24,80 @@ public sealed class SqliteThumbnailCacheStateRepository
         _logger = logger;
     }
 
+    public async Task<int> ResetPathsAsync(
+        IReadOnlyCollection<string> thumbnailPaths,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(thumbnailPaths);
+
+        if (thumbnailPaths.Count == 0)
+        {
+            return 0;
+        }
+
+        await using var connection = CreateConnection();
+
+        await connection
+            .OpenAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        await ConfigureConnectionAsync(
+                connection,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        await using var transaction =
+            await connection
+                .BeginTransactionAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+        var updatedCount = 0;
+
+        foreach (var thumbnailPath in thumbnailPaths)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            await using var command =
+                connection.CreateCommand();
+
+            command.Transaction =
+                (SqliteTransaction)transaction;
+
+            command.CommandText =
+                """
+                UPDATE VideoFiles
+                SET
+                    ThumbnailState = $notGenerated,
+                    ThumbnailPath = NULL
+                WHERE ThumbnailPath = $thumbnailPath;
+                """;
+
+            command.Parameters.AddWithValue(
+                "$notGenerated",
+                (int)VideoFileThumbnailState.NotGenerated);
+
+            command.Parameters.AddWithValue(
+                "$thumbnailPath",
+                thumbnailPath);
+
+            updatedCount += await command
+                .ExecuteNonQueryAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        await transaction
+            .CommitAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        _logger.LogInformation(
+            "Reset thumbnail cache state for " +
+            "{VideoFileCount} indexed video files after " +
+            "automatic cache cleanup.",
+            updatedCount);
+
+        return updatedCount;
+    }
+
     public async Task<int> ResetAllAsync(
         CancellationToken cancellationToken = default)
     {

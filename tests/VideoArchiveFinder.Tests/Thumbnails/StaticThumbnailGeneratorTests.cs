@@ -491,4 +491,5 @@ public sealed class StaticThumbnailGeneratorTests
             return Task.FromResult(handler(request));
         }
     }
+
 }

@@ -67,7 +67,11 @@ public sealed partial class CacheSettingsDialog : Window
 
             CacheInfoText.Text =
                 $"Размер: {FormatSizeBytes(cacheInfo.SizeBytes)}. " +
-                $"Файлов: {cacheInfo.FileCount}.";
+                $"Файлов: {cacheInfo.FileCount}. " +
+                (cacheInfo.MaximumSizeBytes is long maximumSizeBytes
+                    ? $"Автоматический лимит: " +
+                      $"{FormatSizeBytes(maximumSizeBytes)}."
+                    : "Автоматический лимит временно недоступен.");
         }
         catch (Exception exception)
         {

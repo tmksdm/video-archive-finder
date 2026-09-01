@@ -15,6 +15,9 @@ public sealed class ThumbnailCacheService
     private readonly IThumbnailCacheStateRepository
         _cacheStateRepository;
 
+    private readonly IThumbnailCacheMaintenanceService
+        _cacheMaintenanceService;
+
     private readonly ILogger<ThumbnailCacheService>
         _logger;
 
@@ -24,12 +27,16 @@ public sealed class ThumbnailCacheService
             thumbnailGenerationQueue,
         IThumbnailCacheStateRepository
             cacheStateRepository,
+        IThumbnailCacheMaintenanceService
+            cacheMaintenanceService,
         ILogger<ThumbnailCacheService> logger)
     {
         _cachePathProvider = cachePathProvider;
         _thumbnailGenerationQueue =
             thumbnailGenerationQueue;
         _cacheStateRepository = cacheStateRepository;
+        _cacheMaintenanceService =
+            cacheMaintenanceService;
         _logger = logger;
     }
 
@@ -51,7 +58,10 @@ public sealed class ThumbnailCacheService
             DirectoryPath: directoryPath,
             SizeBytes: info.SizeBytes,
             FileCount: info.FileCount,
-            MaximumSizeBytes: null);
+            MaximumSizeBytes:
+                _cacheMaintenanceService
+                    .GetMaximumSizeBytes(
+                        info.SizeBytes));
     }
 
     public async Task<ThumbnailCacheClearResult>

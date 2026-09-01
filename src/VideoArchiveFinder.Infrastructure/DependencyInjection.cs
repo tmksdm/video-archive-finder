@@ -36,6 +36,17 @@ public static class DependencyInjection
             SqliteThumbnailCacheStateRepository>();
 
         services.AddSingleton<
+            IStorageVolumeInfoProvider,
+            SystemStorageVolumeInfoProvider>();
+
+        services.AddSingleton<
+            ThumbnailCacheLimitCalculator>();
+
+        services.AddSingleton<
+            IThumbnailCacheMaintenanceService,
+            ThumbnailCacheMaintenanceService>();
+
+        services.AddSingleton<
             IThumbnailCacheService,
             ThumbnailCacheService>();
 

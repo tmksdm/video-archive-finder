@@ -41,7 +41,7 @@ public sealed class ThumbnailCacheServiceTests
 
         Assert.Equal(402, cacheInfo.SizeBytes);
         Assert.Equal(3, cacheInfo.FileCount);
-        Assert.Null(cacheInfo.MaximumSizeBytes);
+        Assert.Equal(5_000, cacheInfo.MaximumSizeBytes);
     }
 
     [Fact]
@@ -134,6 +134,7 @@ public sealed class ThumbnailCacheServiceTests
                 new ThumbnailCacheKeyGenerator()),
             queue,
             stateRepository,
+            new FixedThumbnailCacheMaintenanceService(),
             NullLogger<ThumbnailCacheService>.Instance);
     }
 
@@ -211,6 +212,13 @@ public sealed class ThumbnailCacheServiceTests
 
         public int ResetCallCount { get; private set; }
 
+        public Task<int> ResetPathsAsync(
+            IReadOnlyCollection<string> thumbnailPaths,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(0);
+        }
+
         public Task<int> ResetAllAsync(
             CancellationToken cancellationToken =
                 default)
@@ -219,6 +227,30 @@ public sealed class ThumbnailCacheServiceTests
             ResetCallCount++;
 
             return Task.FromResult(0);
+        }
+    }
+
+    private sealed class
+        FixedThumbnailCacheMaintenanceService
+        : IThumbnailCacheMaintenanceService
+    {
+        public long? GetMaximumSizeBytes(
+            long currentCacheSizeBytes)
+        {
+            return 5_000;
+        }
+
+        public Task<ThumbnailCacheTrimResult> TrimAsync(
+            string? protectedFilePath = null,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(
+                new ThumbnailCacheTrimResult(
+                    5_000,
+                    0,
+                    0,
+                    0,
+                    0));
         }
     }
 
