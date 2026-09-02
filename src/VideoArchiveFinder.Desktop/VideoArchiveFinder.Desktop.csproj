@@ -23,6 +23,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <AssemblyName>VideoArchiveFinder</AssemblyName>
+	<ApplicationIcon>Assets\VideoArchiveFinder.ico</ApplicationIcon>
 	<Product>Video Archive Finder</Product>
     <VlcWindowsX64TargetDir>app\libvlc</VlcWindowsX64TargetDir>
     <VlcWindowsX64Enabled>true</VlcWindowsX64Enabled>
