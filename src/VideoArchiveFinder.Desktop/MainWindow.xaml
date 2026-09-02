@@ -1392,6 +1392,7 @@ BorderBrush="{DynamicResource AppBorderBrush}"
                     <Grid x:Name="HoverScrubInputLayer"
                           Background="#01000000"
                           PreviewMouseLeftButtonDown="HoverScrubInputLayer_PreviewMouseLeftButtonDown"
+                          PreviewMouseWheel="HoverScrubInputLayer_PreviewMouseWheel"
                           MouseMove="HoverScrubInputLayer_MouseMove"
                           MouseLeave="HoverScrubInputLayer_MouseLeave"/>
                 </vlc:VideoView>

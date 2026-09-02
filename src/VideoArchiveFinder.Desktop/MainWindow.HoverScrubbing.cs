@@ -139,6 +139,30 @@ public partial class MainWindow
         }
     }
 
+    private void HoverScrubInputLayer_PreviewMouseWheel(
+        object sender,
+        MouseWheelEventArgs e)
+    {
+        if (_hoverScrubTarget is not { } target ||
+            FindVisualAncestor<ScrollViewer>(target) is not
+                { } scrollViewer)
+        {
+            return;
+        }
+
+        var forwardedEvent = new MouseWheelEventArgs(
+            e.MouseDevice,
+            e.Timestamp,
+            e.Delta)
+        {
+            RoutedEvent = Mouse.MouseWheelEvent,
+            Source = scrollViewer
+        };
+
+        scrollViewer.RaiseEvent(forwardedEvent);
+        e.Handled = forwardedEvent.Handled;
+    }
+
     private void HoverScrubInputLayer_MouseLeave(
         object sender,
         MouseEventArgs e)

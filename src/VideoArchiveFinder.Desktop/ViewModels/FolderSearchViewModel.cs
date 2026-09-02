@@ -24,6 +24,7 @@ public partial class FolderSearchViewModel
         _logger;
 
     private CancellationTokenSource? _searchCancellation;
+    private IReadOnlyCollection<Guid> _rootSourceIds = [];
     private int _searchVersion;
     private bool _isDisposed;
 
@@ -89,6 +90,19 @@ public partial class FolderSearchViewModel
         QueueSearch();
     }
 
+    public void SetRootSourceIds(
+        IEnumerable<Guid> rootSourceIds)
+    {
+        ArgumentNullException.ThrowIfNull(rootSourceIds);
+
+        _rootSourceIds = rootSourceIds
+            .Distinct()
+            .ToArray();
+
+        Results.Clear();
+        QueueSearch();
+    }
+
     private void QueueSearch()
     {
         if (_isDisposed)
@@ -146,7 +160,8 @@ public partial class FolderSearchViewModel
             var query = new FolderSearchQuery(
                 SearchText,
                 SearchMode,
-                MaximumDisplayedResults);
+                MaximumDisplayedResults,
+                _rootSourceIds);
 
             var matches =
                 await _folderSearchService.SearchAsync(

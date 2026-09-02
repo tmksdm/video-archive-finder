@@ -278,6 +278,58 @@ public sealed class SqliteFolderSearchServiceTests
     }
 
     [Fact]
+    public async Task SearchAsync_RootSourceIds_ExcludesOtherSources()
+    {
+        var context = await CreateContextAsync();
+
+        await AddFoldersAsync(
+            context,
+            "Нужная папка");
+
+        await context.Repository.UpsertBatchAsync(
+        [
+            CreateFolder(
+                context,
+                Path.Combine(
+                    _temporaryDirectory,
+                    "Orphaned"),
+                "Нужная осиротевшая папка") with
+            {
+                RootSourceId = Guid.NewGuid()
+            }
+        ]);
+
+        var results =
+            await context.SearchService.SearchAsync(
+                new FolderSearchQuery(
+                    "нужная",
+                    FolderSearchMode.Smart,
+                    RootSourceIds: [context.RootSourceId]));
+
+        var result = Assert.Single(results);
+        Assert.Equal("Нужная папка", result.Name);
+    }
+
+    [Fact]
+    public async Task SearchAsync_EmptyRootSourceIds_ReturnsEmpty()
+    {
+        var context = await CreateContextAsync();
+
+        await AddFoldersAsync(
+            context,
+            "Нужная папка");
+
+        var results =
+            await context.SearchService.SearchAsync(
+                new FolderSearchQuery(
+                    "нужная",
+                    FolderSearchMode.Smart,
+                    RootSourceIds: []));
+
+        Assert.Empty(results);
+    }
+
+    [Fact]
     public async Task SearchAsync_WhitespaceQuery_ReturnsEmptyResult()
     {
         var context = await CreateContextAsync();

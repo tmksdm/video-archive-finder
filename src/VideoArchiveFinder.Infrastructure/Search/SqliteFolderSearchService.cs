@@ -55,6 +55,15 @@ public sealed class SqliteFolderSearchService
             return [];
         }
 
+        var rootSourceIds = query.RootSourceIds?
+            .Distinct()
+            .ToArray();
+
+        if (rootSourceIds is { Length: 0 })
+        {
+            return [];
+        }
+
         try
         {
             await using var connection = CreateConnection();
@@ -70,15 +79,20 @@ public sealed class SqliteFolderSearchService
 
             await using var command = connection.CreateCommand();
 
+            AddRootSourceIdParameters(
+                command,
+                rootSourceIds);
+
             command.CommandText = query.Mode switch
             {
                 FolderSearchMode.Exact =>
-                    BuildExactSearchCommand(),
+                    BuildExactSearchCommand(rootSourceIds),
 
                 FolderSearchMode.Smart =>
                     BuildSmartSearchCommand(
                         command,
-                        query.Text),
+                        query.Text,
+                        rootSourceIds),
 
                 _ => throw new ArgumentOutOfRangeException(
                     nameof(query),
@@ -128,15 +142,18 @@ public sealed class SqliteFolderSearchService
         }
     }
 
-    private static string BuildExactSearchCommand()
+    private static string BuildExactSearchCommand(
+        IReadOnlyCollection<Guid>? rootSourceIds)
     {
         return BuildSelectCommand(
-            "instr(NormalizedName, $normalizedQuery) > 0");
+            "instr(NormalizedName, $normalizedQuery) > 0",
+            rootSourceIds);
     }
 
     private string BuildSmartSearchCommand(
         SqliteCommand command,
-        string queryText)
+        string queryText,
+        IReadOnlyCollection<Guid>? rootSourceIds)
     {
         var tokens = _textNormalizationService
             .Tokenize(queryText)
@@ -145,7 +162,7 @@ public sealed class SqliteFolderSearchService
 
         if (tokens.Length == 0)
         {
-            return BuildExactSearchCommand();
+            return BuildExactSearchCommand(rootSourceIds);
         }
 
         var conditions = new List<string>();
@@ -202,11 +219,13 @@ public sealed class SqliteFolderSearchService
         return BuildSelectCommand(
             string.Join(
                 Environment.NewLine + " AND ",
-                conditions));
+                conditions),
+            rootSourceIds);
     }
 
     private static string BuildSelectCommand(
-        string searchCondition)
+        string searchCondition,
+        IReadOnlyCollection<Guid>? rootSourceIds)
     {
         var commandText = new StringBuilder();
 
@@ -227,6 +246,14 @@ public sealed class SqliteFolderSearchService
             """);
 
         commandText.AppendLine(searchCondition);
+
+        if (rootSourceIds is not null)
+        {
+            commandText.AppendLine(
+                $"AND RootSourceId IN ({string.Join(", ",
+                    Enumerable.Range(0, rootSourceIds.Count)
+                        .Select(index => $"$rootSourceId{index}"))})");
+        }
 
         commandText.AppendLine(
             """
@@ -254,6 +281,23 @@ public sealed class SqliteFolderSearchService
             """);
 
         return commandText.ToString();
+    }
+
+    private static void AddRootSourceIdParameters(
+        SqliteCommand command,
+        IReadOnlyList<Guid>? rootSourceIds)
+    {
+        if (rootSourceIds is null)
+        {
+            return;
+        }
+
+        for (var index = 0; index < rootSourceIds.Count; index++)
+        {
+            command.Parameters.AddWithValue(
+                $"$rootSourceId{index}",
+                rootSourceIds[index].ToString("D"));
+        }
     }
 
     private SqliteConnection CreateConnection()

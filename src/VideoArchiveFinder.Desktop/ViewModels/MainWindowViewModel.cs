@@ -140,6 +140,7 @@ ILogger<MainWindowViewModel> logger)
             }
 
             HasSources = Sources.Count > 0;
+            UpdateSearchSourceFilter();
             StatusText = HasSources
                 ? $"Источников архива: {Sources.Count}"
                 : "Источники архива ещё не добавлены";
@@ -572,6 +573,7 @@ ILogger<MainWindowViewModel> logger)
             }
 
             HasSources = Sources.Count > 0;
+            UpdateSearchSourceFilter();
 
             StatusText = sourcesToRemove.Count == 1
                 ? HasSources
@@ -629,6 +631,7 @@ ILogger<MainWindowViewModel> logger)
             CreateSourceItem(result.Source));
 
         HasSources = true;
+        UpdateSearchSourceFilter();
         StatusText =
             $"Источник «{result.Source.DisplayName}» добавлен";
 
@@ -667,6 +670,13 @@ ILogger<MainWindowViewModel> logger)
             insertionIndex,
             newSource);
     }
+
+    private void UpdateSearchSourceFilter()
+    {
+        Search.SetRootSourceIds(
+            Sources.Select(source => source.Id));
+    }
+
     private ArchiveSourceItemViewModel CreateSourceItem(
         ArchiveSource source)
     {
