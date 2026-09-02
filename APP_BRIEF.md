@@ -20,6 +20,7 @@
 ## Проверенное состояние этапа 6
 
 - [x] MP4, MOV и MTS/M2TS открываются и позволяют переходить вперёд и назад.
+- [x] Реальный MXF по UNC открывается, получает метаданные и миниатюру; hover scrubbing вручную подтверждён пользователем.
 - [x] Длинный ролик и ролик с длинным GOP не приводят к зависанию интерфейса.
 - [x] UNC-файл работает, а потеря сети завершается понятной ошибкой без падения.
 - [x] Первый кадр, CPU и память измерены и зафиксированы; звук отсутствует.
@@ -80,7 +81,8 @@
 - Сборка: `dotnet build .\VideoArchiveFinder.sln`
 - Тесты: `dotnet test .\VideoArchiveFinder.sln --no-build`
 - Portable-публикация: `dotnet publish .\src\VideoArchiveFinder.Desktop -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false`
+- Release candidate: `.\scripts\New-PortableRelease.ps1 -Version 1.0.0-rc.1`
 
 ## Открытые решения
 
-- Техническая работа этапа 8 завершена; текущие изменения проверены, но ещё не закоммичены.
+- Portable release candidate `1.0.0-rc.1` подготовлен; перед финальным релизом требуется ручная приёмка на отдельном компьютере.
