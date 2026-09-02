@@ -1,8 +1,10 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Runtime.InteropServices;
 using System.IO;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using VideoArchiveFinder.Application.Search;
@@ -19,6 +21,10 @@ namespace VideoArchiveFinder.Desktop;
 
 public partial class MainWindow : Window
 {
+    private const int WindowMessageGetMinMaxInfo = 0x0024;
+
+    private const uint MonitorDefaultToNearest = 0x00000002;
+
     private readonly IAppThemeService
         _appThemeService;
 
@@ -66,6 +72,8 @@ public partial class MainWindow : Window
 
     private bool _isSearchResultsPanelHidden;
 
+    private HwndSource? _windowSource;
+
 
     public MainWindow(
         MainWindowViewModel viewModel,
@@ -95,6 +103,9 @@ public partial class MainWindow : Window
 
         Closed +=
             MainWindow_Closed;
+
+        SourceInitialized +=
+            MainWindow_SourceInitialized;
 
         UpdateThemeMenuChecks();
         UpdateCaptionState();
@@ -132,6 +143,82 @@ public partial class MainWindow : Window
         EventArgs e)
     {
         UpdateCaptionState();
+    }
+
+    private void MainWindow_SourceInitialized(
+        object? sender,
+        EventArgs e)
+    {
+        var windowHandle =
+            new WindowInteropHelper(this).Handle;
+
+        _windowSource =
+            HwndSource.FromHwnd(windowHandle);
+
+        _windowSource?.AddHook(
+            MainWindowWindowProcedure);
+    }
+
+    private IntPtr MainWindowWindowProcedure(
+        IntPtr windowHandle,
+        int message,
+        IntPtr wordParameter,
+        IntPtr longParameter,
+        ref bool handled)
+    {
+        if (message != WindowMessageGetMinMaxInfo)
+        {
+            return IntPtr.Zero;
+        }
+
+        var monitorHandle = MonitorFromWindow(
+            windowHandle,
+            MonitorDefaultToNearest);
+
+        if (monitorHandle == IntPtr.Zero)
+        {
+            return IntPtr.Zero;
+        }
+
+        var monitorInfo = new MonitorInfo
+        {
+            Size = Marshal.SizeOf<MonitorInfo>()
+        };
+
+        if (!GetMonitorInfo(
+                monitorHandle,
+                ref monitorInfo))
+        {
+            return IntPtr.Zero;
+        }
+
+        var minMaxInfo =
+            Marshal.PtrToStructure<MinMaxInfo>(
+                longParameter);
+
+        minMaxInfo.MaxPosition.X =
+            monitorInfo.WorkArea.Left -
+            monitorInfo.MonitorArea.Left;
+
+        minMaxInfo.MaxPosition.Y =
+            monitorInfo.WorkArea.Top -
+            monitorInfo.MonitorArea.Top;
+
+        minMaxInfo.MaxSize.X =
+            monitorInfo.WorkArea.Right -
+            monitorInfo.WorkArea.Left;
+
+        minMaxInfo.MaxSize.Y =
+            monitorInfo.WorkArea.Bottom -
+            monitorInfo.WorkArea.Top;
+
+        Marshal.StructureToPtr(
+            minMaxInfo,
+            longParameter,
+            false);
+
+        handled = true;
+        return IntPtr.Zero;
     }
 
     private void UpdateCaptionState()
@@ -273,11 +360,19 @@ public partial class MainWindow : Window
     {
         DisposeHoverScrubbing();
 
+        _windowSource?.RemoveHook(
+            MainWindowWindowProcedure);
+
+        _windowSource = null;
+
         _appThemeService.ThemeChanged -=
             AppThemeService_ThemeChanged;
 
         Closed -=
             MainWindow_Closed;
+
+        SourceInitialized -=
+            MainWindow_SourceInitialized;
     }
 
 
@@ -1112,6 +1207,65 @@ public partial class MainWindow : Window
 
         _videoModeVideoFilesWidth =
             VideoFilesColumn.Width;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(
+        IntPtr windowHandle,
+        uint flags);
+
+    [DllImport(
+        "user32.dll",
+        SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMonitorInfo(
+        IntPtr monitorHandle,
+        ref MonitorInfo monitorInfo);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint
+    {
+        public int X;
+
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MinMaxInfo
+    {
+        public NativePoint Reserved;
+
+        public NativePoint MaxSize;
+
+        public NativePoint MaxPosition;
+
+        public NativePoint MinTrackSize;
+
+        public NativePoint MaxTrackSize;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRectangle
+    {
+        public int Left;
+
+        public int Top;
+
+        public int Right;
+
+        public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MonitorInfo
+    {
+        public int Size;
+
+        public NativeRectangle MonitorArea;
+
+        public NativeRectangle WorkArea;
+
+        public uint Flags;
     }
 
 

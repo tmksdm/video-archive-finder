@@ -81,8 +81,8 @@
 - Сборка: `dotnet build .\VideoArchiveFinder.sln`
 - Тесты: `dotnet test .\VideoArchiveFinder.sln --no-build`
 - Portable-публикация: `dotnet publish .\src\VideoArchiveFinder.Desktop -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false`
-- Release candidate: `.\scripts\New-PortableRelease.ps1 -Version 1.0.0-rc.1`
+- Release candidate: `.\scripts\New-PortableRelease.ps1 -Version 1.0.0-rc.2`
 
 ## Открытые решения
 
-- Portable release candidate `1.0.0-rc.1` подготовлен; перед финальным релизом требуется ручная приёмка на отдельном компьютере.
+- Portable release candidate `1.0.0-rc.2` подготовлен; перед финальным релизом требуется ручная приёмка на отдельном компьютере.
