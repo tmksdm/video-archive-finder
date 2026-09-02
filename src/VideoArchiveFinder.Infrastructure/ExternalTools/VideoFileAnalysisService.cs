@@ -114,7 +114,11 @@ public sealed class VideoFileAnalysisService
             State: VideoFileAnalysisState.Succeeded,
             HasVideoStream: metadata.HasVideoStream,
             DiagnosticMessage:
-                parseResult.DiagnosticMessage);
+                parseResult.DiagnosticMessage,
+            Duration: metadata.Duration,
+            Width: metadata.Width,
+            Height: metadata.Height,
+            Codec: metadata.CodecName);
     }
 
     private async Task<VideoFileAnalysisResult>

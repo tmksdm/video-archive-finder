@@ -7,6 +7,7 @@ namespace VideoArchiveFinder.Infrastructure.ExternalTools;
 
 public sealed class VideoFileAnalysisQueue
     : IVideoFileAnalysisQueue,
+      IVideoFileAnalysisStateChangeSource,
       IAsyncDisposable,
       IDisposable
 {
@@ -28,6 +29,10 @@ public sealed class VideoFileAnalysisQueue
     private readonly Task[] _workers;
 
     private int _isDisposed;
+
+    public event EventHandler<
+        VideoFileAnalysisStateChangedEventArgs>?
+        StateChanged;
 
     public VideoFileAnalysisQueue(
         IVideoFileAnalysisService analysisService,
@@ -191,6 +196,13 @@ public sealed class VideoFileAnalysisQueue
                                 request.FullPath,
                                 stoppingToken);
 
+                    if (result.WasStored)
+                    {
+                        PublishStateChanged(
+                            request,
+                            result);
+                    }
+
                     if (result.WasStored &&
                         result.State ==
                             VideoFileAnalysisState
@@ -234,6 +246,41 @@ public sealed class VideoFileAnalysisQueue
                 .IsCancellationRequested)
         {
             // Остановка очереди является штатной.
+        }
+    }
+
+    private void PublishStateChanged(
+        VideoFileAnalysisRequest request,
+        VideoFileAnalysisResult result)
+    {
+        var handlers = StateChanged;
+
+        if (handlers is null)
+        {
+            return;
+        }
+
+        var eventArgs =
+            new VideoFileAnalysisStateChangedEventArgs(
+                request,
+                result);
+
+        foreach (EventHandler<
+                     VideoFileAnalysisStateChangedEventArgs>
+                 handler in handlers.GetInvocationList())
+        {
+            try
+            {
+                handler(this, eventArgs);
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(
+                    exception,
+                    "A video analysis notification " +
+                    "handler failed for {VideoPath}.",
+                    request.FullPath);
+            }
         }
     }
 }

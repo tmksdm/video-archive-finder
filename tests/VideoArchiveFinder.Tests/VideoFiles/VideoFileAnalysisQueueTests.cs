@@ -253,6 +253,55 @@ public sealed class VideoFileAnalysisQueueTests
             thumbnailRequest.LastWriteTimeUtc);
     }
 
+    [Fact]
+    public async Task StoredAnalysis_PublishesCompletedMetadata()
+    {
+        var duration = TimeSpan.FromMinutes(5.25);
+        var notification =
+            new TaskCompletionSource<
+                VideoFileAnalysisStateChangedEventArgs>(
+                TaskCreationOptions
+                    .RunContinuationsAsynchronously);
+
+        var analysisService =
+            new TestVideoFileAnalysisService(
+                (_, _, _) =>
+                    Task.FromResult(
+                        new VideoFileAnalysisResult(
+                            WasStored: true,
+                            State:
+                                VideoFileAnalysisState
+                                    .Succeeded,
+                            HasVideoStream: true,
+                            DiagnosticMessage:
+                                string.Empty,
+                            Duration: duration)));
+
+        await using var queue =
+            new VideoFileAnalysisQueue(
+                analysisService,
+                new TestStaticThumbnailGenerationQueue(),
+                NullLogger<VideoFileAnalysisQueue>.Instance,
+                maximumParallelism: 1,
+                capacity: 4);
+
+        queue.StateChanged +=
+            (_, eventArgs) =>
+                notification.TrySetResult(eventArgs);
+
+        var request = CreateRequest(
+            @"C:\Archive\Video.mp4");
+
+        await queue.EnqueueAsync(request);
+
+        var eventArgs =
+            await notification.Task.WaitAsync(
+                TimeSpan.FromSeconds(5));
+
+        Assert.Equal(request, eventArgs.Request);
+        Assert.Equal(duration, eventArgs.Result.Duration);
+    }
+
     [Theory]
     [InlineData(
         true,

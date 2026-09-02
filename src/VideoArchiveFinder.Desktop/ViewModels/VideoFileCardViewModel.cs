@@ -14,6 +14,8 @@ public partial class VideoFileCardViewModel
 
         VideoFile = videoFile;
 
+        _duration = videoFile.Duration;
+
         _thumbnailState =
             videoFile.ThumbnailState;
 
@@ -56,8 +58,10 @@ public partial class VideoFileCardViewModel
     public bool? HasVideoStream =>
         VideoFile.HasVideoStream;
 
-    public TimeSpan? Duration =>
-        VideoFile.Duration;
+    public string? DurationText =>
+        Duration is { } duration
+            ? FormatDuration(duration)
+            : null;
 
     public int? Width =>
         VideoFile.Width;
@@ -86,6 +90,9 @@ public partial class VideoFileCardViewModel
     [ObservableProperty]
     private bool _hasThumbnailLoadError;
 
+    [ObservableProperty]
+    private TimeSpan? _duration;
+
     public bool HasThumbnailImage =>
         ThumbnailImage is not null;
 
@@ -101,6 +108,27 @@ public partial class VideoFileCardViewModel
 
     public bool IsThumbnailPlaceholderVisible =>
         !HasThumbnailImage;
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        var totalHours = (long)duration.TotalHours;
+
+        return totalHours > 0
+            ? $"{totalHours}:{duration.Minutes:00}:{duration.Seconds:00}"
+            : $"{duration.Minutes}:{duration.Seconds:00}";
+    }
+
+    public void ApplyAnalysisResult(
+        VideoFileAnalysisResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        Duration =
+            result.State ==
+                VideoFileAnalysisState.Succeeded
+                ? result.Duration
+                : null;
+    }
 
     public void ApplyThumbnailState(
         VideoFileThumbnailState state,
@@ -155,6 +183,11 @@ public partial class VideoFileCardViewModel
 
         OnPropertyChanged(
             nameof(IsThumbnailFailed));
+    }
+
+    partial void OnDurationChanged(TimeSpan? value)
+    {
+        OnPropertyChanged(nameof(DurationText));
     }
 
     partial void OnThumbnailImageChanged(

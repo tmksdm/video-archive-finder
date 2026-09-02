@@ -102,6 +102,12 @@ public static class DependencyInjection
                     serviceProvider.GetRequiredService<
                         VideoFileAnalysisQueue>());
 
+        services.AddSingleton<
+            IVideoFileAnalysisStateChangeSource>(
+                serviceProvider =>
+                    serviceProvider.GetRequiredService<
+                        VideoFileAnalysisQueue>());
+
 
         services.AddSingleton<
             IApplicationDataDirectoryProvider,

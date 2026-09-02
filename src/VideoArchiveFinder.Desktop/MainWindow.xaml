@@ -1128,7 +1128,9 @@ Text="{Binding IndexingStatusText}"
                                         <ItemsPanelTemplate>
                                             <vwp:VirtualizingWrapPanel
                                                 SpacingMode="None"
-                                                StretchItems="False"/>
+                                                StretchItems="False"
+                                                ItemSize="{Binding DataContext.VideoFiles.GridCardItemSize,
+                                                    RelativeSource={RelativeSource AncestorType={x:Type Window}}}"/>
                                         </ItemsPanelTemplate>
                                     </ListBox.ItemsPanel>
 
@@ -1136,6 +1138,9 @@ Text="{Binding IndexingStatusText}"
                                         <Style TargetType="{x:Type ListBoxItem}">
                                             <Setter Property="Width"
         Value="{Binding DataContext.VideoFiles.GridCardWidth,
+                        RelativeSource={RelativeSource AncestorType={x:Type Window}}}"/>
+                                            <Setter Property="Height"
+        Value="{Binding DataContext.VideoFiles.GridCardHeight,
                         RelativeSource={RelativeSource AncestorType={x:Type Window}}}"/>
 
                                             <Setter Property="Margin"
@@ -1177,7 +1182,7 @@ Text="{Binding IndexingStatusText}"
                                                 <Grid>
                                                     <Grid.RowDefinitions>
                                                         <RowDefinition Height="Auto"/>
-                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="36"/>
                                                     </Grid.RowDefinitions>
 
 
@@ -1197,20 +1202,24 @@ BorderBrush="{DynamicResource AppBorderBrush}"
                                                     </Border>
 
                                                     <Grid Grid.Row="1"
-      Margin="10,8">
+      Margin="10,0">
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="*"/>
                                                             <ColumnDefinition Width="Auto"/>
                                                         </Grid.ColumnDefinitions>
 
                                                         <TextBlock Grid.Column="0"
+               VerticalAlignment="Center"
                FontWeight="SemiBold"
                Text="{Binding Name}"
                TextTrimming="CharacterEllipsis"
                ToolTip="{Binding Name}"/>
 
-                                                        <!-- Продолжительность будет добавлена справа
-         после подключения FFprobe на этапе 5. -->
+                                                        <TextBlock Grid.Column="1"
+               Margin="8,0,0,0"
+               VerticalAlignment="Center"
+               Foreground="{DynamicResource AppSecondaryTextBrush}"
+               Text="{Binding DurationText}"/>
                                                     </Grid>
 
                                                     <Border Grid.Row="0"

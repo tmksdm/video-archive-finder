@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using System.Collections.ObjectModel;
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -15,6 +16,9 @@ namespace VideoArchiveFinder.Desktop.ViewModels;
 public partial class FolderVideoFilesViewModel
     : ObservableObject, IDisposable
 {
+    private const double GridCardFooterHeight = 36d;
+    private const double GridCardMargin = 4d;
+
     private readonly IVideoFolderRefreshService
         _videoFolderRefreshService;
 
@@ -29,6 +33,9 @@ public partial class FolderVideoFilesViewModel
 
     private readonly IVideoFileAnalysisQueue
         _videoFileAnalysisQueue;
+
+    private readonly IVideoFileAnalysisStateChangeSource
+        _videoFileAnalysisStateChangeSource;
 
     private readonly IStaticThumbnailStateChangeSource
         _thumbnailStateChangeSource;
@@ -65,6 +72,14 @@ public partial class FolderVideoFilesViewModel
     public double GridPreviewHeight =>
         GridCardWidth * 9d / 16d;
 
+    public double GridCardHeight =>
+        GridPreviewHeight + GridCardFooterHeight;
+
+    public Size GridCardItemSize =>
+        new(
+            GridCardWidth + (GridCardMargin * 2d),
+            GridCardHeight + (GridCardMargin * 2d));
+
     [ObservableProperty]
     private string _statusText =
         "Выберите папку в результатах поиска";
@@ -78,6 +93,8 @@ public partial class FolderVideoFilesViewModel
             thumbnailGenerationQueue,
         IVideoFileAnalysisQueue
             videoFileAnalysisQueue,
+        IVideoFileAnalysisStateChangeSource
+            videoFileAnalysisStateChangeSource,
         IStaticThumbnailStateChangeSource
             thumbnailStateChangeSource,
         IWindowsShellService windowsShellService,
@@ -99,6 +116,12 @@ public partial class FolderVideoFilesViewModel
 
         _videoFileAnalysisQueue =
             videoFileAnalysisQueue;
+
+        _videoFileAnalysisStateChangeSource =
+            videoFileAnalysisStateChangeSource;
+
+        _videoFileAnalysisStateChangeSource.StateChanged +=
+            OnVideoFileAnalysisStateChanged;
 
         _thumbnailStateChangeSource =
             thumbnailStateChangeSource;
@@ -426,6 +449,8 @@ public partial class FolderVideoFilesViewModel
     partial void OnGridCardWidthChanged(double value)
     {
         OnPropertyChanged(nameof(GridPreviewHeight));
+        OnPropertyChanged(nameof(GridCardHeight));
+        OnPropertyChanged(nameof(GridCardItemSize));
     }
 
 
@@ -673,6 +698,59 @@ public partial class FolderVideoFilesViewModel
             () => ApplyThumbnailStateChange(eventArgs));
     }
 
+    private void OnVideoFileAnalysisStateChanged(
+        object? sender,
+        VideoFileAnalysisStateChangedEventArgs eventArgs)
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        var dispatcher =
+            System.Windows.Application.Current?.Dispatcher;
+
+        if (dispatcher is null ||
+            dispatcher.HasShutdownStarted ||
+            dispatcher.HasShutdownFinished)
+        {
+            return;
+        }
+
+        if (dispatcher.CheckAccess())
+        {
+            ApplyVideoFileAnalysisStateChange(eventArgs);
+            return;
+        }
+
+        _ = dispatcher.InvokeAsync(
+            () => ApplyVideoFileAnalysisStateChange(eventArgs));
+    }
+
+    private void ApplyVideoFileAnalysisStateChange(
+        VideoFileAnalysisStateChangedEventArgs eventArgs)
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        var request = eventArgs.Request;
+
+        var card = Files.FirstOrDefault(
+            item =>
+                item.RootSourceId == request.RootSourceId &&
+                string.Equals(
+                    item.FullPath,
+                    request.FullPath,
+                    StringComparison.OrdinalIgnoreCase) &&
+                item.SizeBytes == request.SizeBytes &&
+                item.LastWriteTimeUtc ==
+                    request.LastWriteTimeUtc);
+
+        card?.ApplyAnalysisResult(eventArgs.Result);
+    }
+
     private void ApplyThumbnailStateChange(
         StaticThumbnailStateChangedEventArgs eventArgs)
     {
@@ -763,6 +841,9 @@ public partial class FolderVideoFilesViewModel
 
         _thumbnailStateChangeSource.StateChanged -=
             OnStaticThumbnailStateChanged;
+
+        _videoFileAnalysisStateChangeSource.StateChanged -=
+            OnVideoFileAnalysisStateChanged;
 
         Interlocked.Increment(
             ref _loadVersion);
