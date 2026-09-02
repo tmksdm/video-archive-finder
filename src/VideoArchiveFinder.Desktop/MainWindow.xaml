@@ -4,6 +4,7 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         xmlns:controls="clr-namespace:VideoArchiveFinder.Desktop.Controls"
+        xmlns:vwp="clr-namespace:WpfToolkit.Controls;assembly=VirtualizingWrapPanel"
         xmlns:vlc="clr-namespace:LibVLCSharp.WPF;assembly=LibVLCSharp.WPF"
         Title="Video Archive Finder"
         Width="1280"
@@ -1117,13 +1118,17 @@ Text="{Binding IndexingStatusText}"
          BorderThickness="0"
          Background="Transparent"
          HorizontalContentAlignment="Left"
+         ScrollViewer.CanContentScroll="True"
          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-         ScrollViewer.VerticalScrollBarVisibility="Auto">
+         ScrollViewer.VerticalScrollBarVisibility="Auto"
+         VirtualizingPanel.IsVirtualizing="True"
+         VirtualizingPanel.VirtualizationMode="Recycling">
 
                                     <ListBox.ItemsPanel>
                                         <ItemsPanelTemplate>
-                                            <WrapPanel IsItemsHost="True"
-                       Orientation="Horizontal"/>
+                                            <vwp:VirtualizingWrapPanel
+                                                SpacingMode="None"
+                                                StretchItems="False"/>
                                         </ItemsPanelTemplate>
                                     </ListBox.ItemsPanel>
 

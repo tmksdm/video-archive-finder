@@ -13,6 +13,7 @@
     <PackageReference Include="Serilog.Extensions.Hosting" Version="10.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.23.1" />
+    <PackageReference Include="VirtualizingWrapPanel" Version="2.5.4" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -60,6 +61,13 @@
             <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
             <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
         </Content>
+
+        <Content Include="ThirdPartyLicenses\VirtualizingWrapPanel\**\*">
+            <Link>app\licenses\virtualizing-wrap-panel\%(RecursiveDir)%(Filename)%(Extension)</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+            <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+        </Content>
 	</ItemGroup>
 
     <Target Name="KeepBundledLibVlcOutsideSingleFile"
@@ -72,6 +80,16 @@
                     Condition="$([System.String]::Copy('%(Content.Link)').StartsWith('app\libvlc\'))">true</ExcludeFromSingleFile>
             </Content>
         </ItemGroup>
+    </Target>
+
+    <Target Name="RemoveDebugSymbolsFromSingleFilePublish"
+            AfterTargets="Publish"
+            Condition="'$(PublishSingleFile)' == 'true'">
+        <ItemGroup>
+            <PortableDebugSymbols Include="$(PublishDir)*.pdb" />
+        </ItemGroup>
+
+        <Delete Files="@(PortableDebugSymbols)" />
     </Target>
 
 </Project>
