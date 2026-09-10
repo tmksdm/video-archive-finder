@@ -899,7 +899,7 @@ Text="{Binding IndexingStatusText}"
 
                         <GridSplitter x:Name="SearchResultsSplitter"
                       Grid.Column="1"
-                      Width="6"
+                      Width="12"
                       HorizontalAlignment="Stretch"
                       VerticalAlignment="Stretch"
                       Background="Transparent"
@@ -907,7 +907,68 @@ Text="{Binding IndexingStatusText}"
                       ResizeBehavior="PreviousAndNext"
                       ResizeDirection="Columns"
                       ShowsPreview="True"
-                      Visibility="Collapsed"/>
+                      ToolTip="Потяните, чтобы изменить ширину дерева результатов"
+                      AutomationProperties.Name="Изменить ширину дерева результатов"
+                      Visibility="Collapsed">
+
+                        <GridSplitter.Style>
+                            <Style TargetType="{x:Type GridSplitter}">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="{x:Type GridSplitter}">
+                                            <Grid Background="Transparent">
+                                                <Border Width="1"
+                                                        HorizontalAlignment="Center"
+                                                        Background="{DynamicResource AppBorderBrush}"/>
+                                                <Border x:Name="SplitterHandle"
+                                                        Width="8"
+                                                        Height="42"
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        Background="{DynamicResource AppSurfaceAlternativeBrush}"
+                                                        BorderBrush="{DynamicResource AppBorderBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="4">
+                                                    <StackPanel HorizontalAlignment="Center"
+                                                                VerticalAlignment="Center">
+                                                        <Ellipse Width="2"
+                                                                 Height="2"
+                                                                 Margin="0,1"
+                                                                 Fill="{DynamicResource AppSelectionAccentBrush}"/>
+                                                        <Ellipse Width="2"
+                                                                 Height="2"
+                                                                 Margin="0,1"
+                                                                 Fill="{DynamicResource AppSelectionAccentBrush}"/>
+                                                        <Ellipse Width="2"
+                                                                 Height="2"
+                                                                 Margin="0,1"
+                                                                 Fill="{DynamicResource AppSelectionAccentBrush}"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </Grid>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver"
+                                                         Value="True">
+                                                    <Setter TargetName="SplitterHandle"
+                                                            Property="BorderBrush"
+                                                            Value="{DynamicResource AppSelectionAccentBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsDragging"
+                                                         Value="True">
+                                                    <Setter TargetName="SplitterHandle"
+                                                            Property="Background"
+                                                            Value="{DynamicResource AppSelectionBrush}"/>
+                                                    <Setter TargetName="SplitterHandle"
+                                                            Property="BorderBrush"
+                                                            Value="{DynamicResource AppSelectionAccentBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </GridSplitter.Style>
+                        </GridSplitter>
 
                         <Border x:Name="VideoFilesPanel"
                 Grid.Column="2"
@@ -1087,16 +1148,23 @@ Text="{Binding IndexingStatusText}"
                                                             <TextBlock FontWeight="SemiBold"
                                                                        Text="{Binding Name}"
                                                                        TextTrimming="CharacterEllipsis"/>
-                                                            <StackPanel Margin="0,4,0,0"
-                                                                        Orientation="Horizontal">
-                                                                <TextBlock Foreground="{DynamicResource AppSecondaryTextBrush}"
-                                                                           Text="{Binding DirectVideoFileCount,
-                                                                               StringFormat={}{0} видео}"/>
-                                                                <TextBlock Margin="10,0,0,0"
-                                                                           Foreground="{DynamicResource AppSecondaryTextBrush}"
-                                                                           Text="{Binding DirectSubfolderCount,
-                                                                               StringFormat={}{0} папок}"/>
-                                                            </StackPanel>
+                                                            <TextBlock Margin="0,4,0,0"
+                                                                       Text="{Binding DirectSubfolderCount,
+                                                                           StringFormat={}{0} папок}">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="{x:Type TextBlock}">
+                                                                        <Setter Property="Foreground"
+                                                                                Value="{DynamicResource AppSecondaryTextBrush}"/>
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding DirectSubfolderCount}"
+                                                                                         Value="0">
+                                                                                <Setter Property="Visibility"
+                                                                                        Value="Collapsed"/>
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
                                                         </StackPanel>
                                                     </Grid>
                                                 </Border>

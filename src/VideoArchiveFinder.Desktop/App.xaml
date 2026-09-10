@@ -235,17 +235,38 @@
             <Style x:Key="AppScrollBarThumbStyle"
                    TargetType="{x:Type primitives:Thumb}">
                 <Setter Property="Background"
-                        Value="{DynamicResource AppMutedTextBrush}"/>
+                        Value="{DynamicResource AppBorderBrush}"/>
 
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="{x:Type primitives:Thumb}">
                             <Border x:Name="ThumbBorder"
-                                    Margin="2"
                                     Background="{TemplateBinding Background}"
-                                    CornerRadius="0"/>
+                                    CornerRadius="2"/>
 
                             <ControlTemplate.Triggers>
+                                <DataTrigger
+                                    Binding="{Binding Orientation,
+                                        RelativeSource={RelativeSource AncestorType={x:Type ScrollBar}}}"
+                                    Value="Vertical">
+                                    <Setter Property="MinHeight"
+                                            Value="28"/>
+                                    <Setter TargetName="ThumbBorder"
+                                            Property="Margin"
+                                            Value="3,2"/>
+                                </DataTrigger>
+
+                                <DataTrigger
+                                    Binding="{Binding Orientation,
+                                        RelativeSource={RelativeSource AncestorType={x:Type ScrollBar}}}"
+                                    Value="Horizontal">
+                                    <Setter Property="MinWidth"
+                                            Value="28"/>
+                                    <Setter TargetName="ThumbBorder"
+                                            Property="Margin"
+                                            Value="2,3"/>
+                                </DataTrigger>
+
                                 <Trigger Property="IsMouseOver"
                                          Value="True">
                                     <Setter TargetName="ThumbBorder"
@@ -267,7 +288,7 @@
 
             <Style TargetType="{x:Type ScrollBar}">
                 <Setter Property="Background"
-                        Value="{DynamicResource AppSurfaceAlternativeBrush}"/>
+                        Value="Transparent"/>
                 <Setter Property="Foreground"
                         Value="{DynamicResource AppMutedTextBrush}"/>
                 <Setter Property="SnapsToDevicePixels"
@@ -280,7 +301,6 @@
                                     Background="{TemplateBinding Background}">
                                 <primitives:Track
                                     x:Name="PART_Track"
-                                    Margin="1"
                                     Minimum="{TemplateBinding Minimum}"
                                     Maximum="{TemplateBinding Maximum}"
                                     Orientation="{TemplateBinding Orientation}"
@@ -312,7 +332,7 @@
                                 <Trigger Property="Orientation"
                                          Value="Vertical">
                                     <Setter Property="Width"
-                                            Value="12"/>
+                                            Value="10"/>
                                     <Setter Property="Height"
                                             Value="Auto"/>
                                     <Setter TargetName="PART_Track"
@@ -325,7 +345,7 @@
                                     <Setter Property="Width"
                                             Value="Auto"/>
                                     <Setter Property="Height"
-                                            Value="12"/>
+                                            Value="10"/>
                                     <Setter TargetName="PART_Track"
                                             Property="IsDirectionReversed"
                                             Value="False"/>

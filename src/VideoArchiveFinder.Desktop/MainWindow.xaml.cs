@@ -1164,7 +1164,7 @@ public partial class MainWindow : Window
         SearchResultsSplitterColumn.Width =
             _isSearchResultsPanelHidden
                 ? new GridLength(0)
-                : new GridLength(6);
+                : new GridLength(12);
 
         SearchResultsSplitter.Visibility =
             _isSearchResultsPanelHidden
