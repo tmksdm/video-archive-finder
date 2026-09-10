@@ -36,12 +36,12 @@ StateChanged="MainWindow_StateChanged"
 
         <DataTemplate x:Key="VideoThumbnailTemplate">
             <Grid ClipToBounds="True"
-          Background="{DynamicResource AppSurfaceAlternativeBrush}">
+          Background="Black">
 
                 <Image Source="{Binding ThumbnailImage}"
                HorizontalAlignment="Stretch"
                VerticalAlignment="Stretch"
-               Stretch="UniformToFill"
+               Stretch="Uniform"
                SnapsToDevicePixels="True"/>
 
                 <Grid Visibility="{Binding IsThumbnailPlaceholderVisible,
