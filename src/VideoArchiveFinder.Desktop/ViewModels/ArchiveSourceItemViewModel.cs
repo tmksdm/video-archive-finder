@@ -36,6 +36,9 @@ public sealed partial class ArchiveSourceItemViewModel :
     public ArchiveSourceType SourceType { get; }
 
     [ObservableProperty]
+    private bool _isIncludedInSearch = true;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(AvailabilityText))]
     [NotifyPropertyChangedFor(nameof(AvailabilityColor))]
     [NotifyPropertyChangedFor(nameof(AvailabilityToolTip))]

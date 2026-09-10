@@ -367,6 +367,7 @@ Text="{Binding Search.SearchText,
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
@@ -374,6 +375,7 @@ Text="{Binding Search.SearchText,
       Margin="0,0,0,12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
@@ -385,7 +387,15 @@ Text="{Binding Search.SearchText,
                Text="Источники"/>
 
                             <Button Grid.Column="1"
-            Width="32"
+                                    Margin="0,0,8,0"
+                                    Padding="8,4"
+                                    Command="{Binding SearchInAllSourcesCommand}"
+                                    Content="Выбрать все"
+                                    ToolTip="Включить все источники в область поиска"
+                                    AutomationProperties.Name="Выбрать все источники для поиска"/>
+
+                            <Button Grid.Column="2"
+             Width="32"
             Height="32"
             Padding="4"
             Command="{Binding AddLocalFolderCommand}"
@@ -396,7 +406,7 @@ Text="{Binding Search.SearchText,
                                  Kind="FolderPlus"/>
                             </Button>
 
-                            <Button Grid.Column="2"
+                            <Button Grid.Column="3"
             Width="32"
             Height="32"
             Margin="4,0,0,0"
@@ -413,7 +423,15 @@ Text="{Binding Search.SearchText,
 
 
 
-                        <Grid Grid.Row="1">
+                        <TextBlock Grid.Row="1"
+                                   Margin="0,0,0,8"
+                                   Foreground="{DynamicResource AppSecondaryTextBrush}"
+                                   FontSize="12"
+                                   Text="{Binding SearchSourceScopeText}"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding SearchSourceScopeText}"/>
+
+                        <Grid Grid.Row="2">
                             <TextBlock HorizontalAlignment="Center"
                    VerticalAlignment="Center"
                    Foreground="{DynamicResource AppMutedTextBrush}"
@@ -502,6 +520,25 @@ Text="{Binding Search.SearchText,
 
                                             <Grid.ContextMenu>
                                                 <ContextMenu>
+                                                    <MenuItem Header="Искать только в выделенных"
+                                                              Click="SearchOnlyInSelectedArchiveSources_Click"
+                                                              ToolTip="Оставить в области поиска только выделенные источники"
+                                                              AutomationProperties.Name="Искать только в выделенных источниках">
+                                                        <MenuItem.Icon>
+                                                            <materialDesign:PackIcon Kind="FilterOutline"/>
+                                                        </MenuItem.Icon>
+                                                    </MenuItem>
+
+                                                    <MenuItem Header="Включить выделенные в поиск"
+                                                              Click="IncludeSelectedArchiveSourcesInSearch_Click"
+                                                              AutomationProperties.Name="Включить выделенные источники в поиск"/>
+
+                                                    <MenuItem Header="Исключить выделенные из поиска"
+                                                              Click="ExcludeSelectedArchiveSourcesFromSearch_Click"
+                                                              AutomationProperties.Name="Исключить выделенные источники из поиска"/>
+
+                                                    <Separator/>
+
                                                     <MenuItem Header="Индексировать папки"
           ToolTip="Запустить или повторить индексирование папок источника"
           AutomationProperties.Name="Индексировать папки источника"
@@ -580,11 +617,41 @@ Text="{Binding Search.SearchText,
                                             </Grid.RowDefinitions>
 
 
-                                            <TextBlock Grid.Row="0"
-                       FontWeight="SemiBold"
-                       Text="{Binding DisplayName}"
-                       TextTrimming="CharacterEllipsis"
-                       ToolTip="{Binding DisplayName}"/>
+                                            <Grid Grid.Row="0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Grid.Column="0"
+                                                           VerticalAlignment="Center"
+                                                           FontWeight="SemiBold"
+                                                           Text="{Binding DisplayName}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding DisplayName}"/>
+
+                                                <CheckBox Grid.Column="1"
+                                                          Margin="10,0,0,0"
+                                                          VerticalAlignment="Center"
+                                                          Content="Искать"
+                                                          IsChecked="{Binding IsIncludedInSearch,
+                                                                              Mode=TwoWay,
+                                                                              UpdateSourceTrigger=PropertyChanged}"
+                                                          ToolTip="Включить источник в область поиска"
+                                                          AutomationProperties.Name="Включить источник в область поиска"/>
+
+                                                <Button Grid.Column="2"
+                                                        Margin="6,0,0,0"
+                                                        Padding="5,1"
+                                                        FontSize="11"
+                                                        Command="{Binding DataContext.SearchOnlyInSourceCommand,
+                                                                          RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                                        CommandParameter="{Binding}"
+                                                        Content="Только этот"
+                                                        ToolTip="Искать только в этом источнике"
+                                                        AutomationProperties.Name="Искать только в этом источнике"/>
+                                            </Grid>
 
                                             <StackPanel Grid.Row="1"
                         Margin="0,3,0,0"

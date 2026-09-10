@@ -311,6 +311,58 @@ public sealed class SqliteFolderSearchServiceTests
     }
 
     [Fact]
+    public async Task SearchAsync_RootSourceIds_IncludesAllSelectedSources()
+    {
+        var context = await CreateContextAsync();
+        var secondSourceId = Guid.NewGuid();
+        var excludedSourceId = Guid.NewGuid();
+
+        await context.Repository.UpsertBatchAsync(
+        [
+            CreateFolder(
+                context,
+                Path.Combine(_temporaryDirectory, "First"),
+                "Общая первая"),
+            CreateFolder(
+                context,
+                Path.Combine(_temporaryDirectory, "Second"),
+                "Общая вторая") with
+            {
+                RootSourceId = secondSourceId
+            },
+            CreateFolder(
+                context,
+                Path.Combine(_temporaryDirectory, "Excluded"),
+                "Общая исключённая") with
+            {
+                RootSourceId = excludedSourceId
+            }
+        ]);
+
+        var results =
+            await context.SearchService.SearchAsync(
+                new FolderSearchQuery(
+                    "общая",
+                    FolderSearchMode.Smart,
+                    RootSourceIds:
+                    [
+                        context.RootSourceId,
+                        secondSourceId
+                    ]));
+
+        Assert.Equal(2, results.Count);
+        Assert.Contains(
+            results,
+            result => result.RootSourceId == context.RootSourceId);
+        Assert.Contains(
+            results,
+            result => result.RootSourceId == secondSourceId);
+        Assert.DoesNotContain(
+            results,
+            result => result.RootSourceId == excludedSourceId);
+    }
+
+    [Fact]
     public async Task SearchAsync_EmptyRootSourceIds_ReturnsEmpty()
     {
         var context = await CreateContextAsync();

@@ -139,6 +139,24 @@ public partial class FolderSearchViewModel
             return;
         }
 
+        if (_rootSourceIds.Count == 0)
+        {
+            Interlocked.CompareExchange(
+                ref _searchCancellation,
+                null,
+                cancellation);
+
+            cancellation.Cancel();
+            cancellation.Dispose();
+
+            Results.Clear();
+            IsSearching = false;
+            ResultsSummary =
+                "Выберите хотя бы один источник для поиска";
+
+            return;
+        }
+
         IsSearching = true;
         ResultsSummary = "Поиск...";
 

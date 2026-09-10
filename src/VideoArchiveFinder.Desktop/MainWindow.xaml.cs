@@ -447,6 +447,49 @@ public partial class MainWindow : Window
         sourceItem.Focus();
     }
 
+    private void SearchOnlyInSelectedArchiveSources_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.SearchOnlyInSources(
+                GetSelectedArchiveSources());
+        }
+    }
+
+    private void IncludeSelectedArchiveSourcesInSearch_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.SetSourcesIncludedInSearch(
+                GetSelectedArchiveSources(),
+                isIncluded: true);
+        }
+    }
+
+    private void ExcludeSelectedArchiveSourcesFromSearch_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel viewModel)
+        {
+            viewModel.SetSourcesIncludedInSearch(
+                GetSelectedArchiveSources(),
+                isIncluded: false);
+        }
+    }
+
+    private IReadOnlyList<ArchiveSourceItemViewModel>
+        GetSelectedArchiveSources()
+    {
+        return ArchiveSourcesList.SelectedItems
+            .OfType<ArchiveSourceItemViewModel>()
+            .ToArray();
+    }
+
     private async void ArchiveSourcesList_PreviewKeyDown(
         object sender,
         KeyEventArgs e)

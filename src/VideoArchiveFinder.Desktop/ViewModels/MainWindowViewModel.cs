@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using MaterialDesignColors;
 using Microsoft.Extensions.Logging;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using VideoArchiveFinder.Application.ArchiveSources;
 using VideoArchiveFinder.Application.Indexing;
 using VideoArchiveFinder.Desktop.Services;
@@ -32,6 +33,7 @@ public partial class MainWindowViewModel : ObservableObject
     private readonly Dictionary<Guid, ActiveIndexingOperation>
         _activeIndexingOperations = [];
 
+    private bool _isUpdatingSearchSourceSelection;
 
     private readonly ILogger<MainWindowViewModel> _logger;
 
@@ -60,6 +62,10 @@ public partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty]
     private string _statusText = "Загрузка источников архива...";
+
+    [ObservableProperty]
+    private string _searchSourceScopeText =
+        "Источники для поиска не выбраны";
 
     public MainWindowViewModel(
         IArchiveSourceService archiveSourceService,
@@ -123,6 +129,7 @@ ILogger<MainWindowViewModel> logger)
             var savedSources = await _archiveSourceService.GetAllAsync(
                 cancellationToken);
 
+            DetachSourceItems();
             Sources.Clear();
 
             foreach (var source in savedSources.OrderBy(
@@ -156,6 +163,7 @@ ILogger<MainWindowViewModel> logger)
         }
         catch (Exception exception)
         {
+            DetachSourceItems();
             Sources.Clear();
             HasSources = false;
             StatusText = "Не удалось загрузить источники архива";
@@ -569,6 +577,7 @@ ILogger<MainWindowViewModel> logger)
 
             foreach (var source in sourcesToRemove)
             {
+                source.PropertyChanged -= SourceItem_PropertyChanged;
                 Sources.Remove(source);
             }
 
@@ -673,8 +682,91 @@ ILogger<MainWindowViewModel> logger)
 
     private void UpdateSearchSourceFilter()
     {
+        var includedSources = Sources
+            .Where(source => source.IsIncludedInSearch)
+            .ToArray();
+
         Search.SetRootSourceIds(
-            Sources.Select(source => source.Id));
+            includedSources.Select(source => source.Id));
+
+        SearchSourceScopeText = includedSources.Length switch
+        {
+            0 => "Источники для поиска не выбраны",
+            _ when includedSources.Length == Sources.Count =>
+                "Поиск: все источники",
+            1 => $"Поиск: «{includedSources[0].DisplayName}»",
+            _ => $"Поиск: выбрано {includedSources.Length} " +
+                 $"из {Sources.Count}"
+        };
+    }
+
+    [RelayCommand]
+    private void SearchOnlyInSource(
+        ArchiveSourceItemViewModel? source)
+    {
+        if (source is null || !Sources.Contains(source))
+        {
+            return;
+        }
+
+        SearchOnlyInSources([source]);
+    }
+
+    [RelayCommand]
+    private void SearchInAllSources()
+    {
+        SetSourcesIncludedInSearch(
+            Sources,
+            isIncluded: true);
+    }
+
+    public void SearchOnlyInSources(
+        IEnumerable<ArchiveSourceItemViewModel> sources)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+
+        var sourceIds = sources
+            .Select(source => source.Id)
+            .ToHashSet();
+
+        SetSearchSourceSelection(
+            source => sourceIds.Contains(source.Id));
+    }
+
+    public void SetSourcesIncludedInSearch(
+        IEnumerable<ArchiveSourceItemViewModel> sources,
+        bool isIncluded)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+
+        var sourceIds = sources
+            .Select(source => source.Id)
+            .ToHashSet();
+
+        SetSearchSourceSelection(
+            source => sourceIds.Contains(source.Id)
+                ? isIncluded
+                : source.IsIncludedInSearch);
+    }
+
+    private void SetSearchSourceSelection(
+        Func<ArchiveSourceItemViewModel, bool> isIncluded)
+    {
+        _isUpdatingSearchSourceSelection = true;
+
+        try
+        {
+            foreach (var source in Sources)
+            {
+                source.IsIncludedInSearch = isIncluded(source);
+            }
+        }
+        finally
+        {
+            _isUpdatingSearchSourceSelection = false;
+        }
+
+        UpdateSearchSourceFilter();
     }
 
     private ArchiveSourceItemViewModel CreateSourceItem(
@@ -682,9 +774,31 @@ ILogger<MainWindowViewModel> logger)
     {
         var sourceItem = new ArchiveSourceItemViewModel(source);
 
+        sourceItem.PropertyChanged += SourceItem_PropertyChanged;
+
         _ = CheckSourceAvailabilityAsync(sourceItem);
 
         return sourceItem;
+    }
+
+    private void SourceItem_PropertyChanged(
+        object? sender,
+        PropertyChangedEventArgs eventArgs)
+    {
+        if (!_isUpdatingSearchSourceSelection &&
+            eventArgs.PropertyName ==
+                nameof(ArchiveSourceItemViewModel.IsIncludedInSearch))
+        {
+            UpdateSearchSourceFilter();
+        }
+    }
+
+    private void DetachSourceItems()
+    {
+        foreach (var source in Sources)
+        {
+            source.PropertyChanged -= SourceItem_PropertyChanged;
+        }
     }
 
     private async Task RestoreIndexingStateAsync(
