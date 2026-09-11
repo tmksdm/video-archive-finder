@@ -59,6 +59,12 @@ public partial class FolderVideoFilesViewModel
     private FolderSearchTreeNode? _selectedFolder;
 
     [ObservableProperty]
+    private string? _selectedContentName;
+
+    [ObservableProperty]
+    private string? _selectedContentPath;
+
+    [ObservableProperty]
     private bool _isLoading;
 
     [ObservableProperty]
@@ -231,7 +237,8 @@ public partial class FolderVideoFilesViewModel
 
     public async Task SelectFolderAsync(
         FolderSearchTreeNode? folder,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? selectedVideoFileFullPath = null)
     {
         ObjectDisposedException.ThrowIf(
             _isDisposed,
@@ -255,6 +262,11 @@ public partial class FolderVideoFilesViewModel
         previousCancellation?.Cancel();
 
         SelectedFolder = folder;
+        SelectedContentName = selectedVideoFileFullPath is null
+            ? folder?.Name
+            : Path.GetFileName(selectedVideoFileFullPath);
+        SelectedContentPath = selectedVideoFileFullPath
+            ?? folder?.FullPath;
         Files.Clear();
         ChildFolders.Clear();
         OnPropertyChanged(nameof(HasFiles));
@@ -294,17 +306,25 @@ public partial class FolderVideoFilesViewModel
                     folder.FullPath,
                     currentCancellation.Token);
 
-            var childFoldersTask = _folderIndexRepository
-                .GetChildrenAsync(
+            var childFoldersTask = selectedVideoFileFullPath is null
+                ? _folderIndexRepository.GetChildrenAsync(
                     folder.Id,
-                    currentCancellation.Token);
+                    currentCancellation.Token)
+                : Task.FromResult<IReadOnlyList<IndexedFolder>>([]);
 
             await Task.WhenAll(
                 filesTask,
                 childFoldersTask);
 
             var refreshResult = await filesTask;
-            var files = refreshResult.Files;
+            var files = selectedVideoFileFullPath is null
+                ? refreshResult.Files
+                : refreshResult.Files
+                    .Where(file => string.Equals(
+                        file.FullPath,
+                        selectedVideoFileFullPath,
+                        StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
             var childFolders = await childFoldersTask;
 
             if (version != _loadVersion)
@@ -395,13 +415,16 @@ public partial class FolderVideoFilesViewModel
             OnPropertyChanged(nameof(HasFiles));
             OnPropertyChanged(nameof(HasChildFolders));
 
-            StatusText =
-                $"Видеофайлов: {files.Count}; " +
-                $"вложенных папок: {childFolders.Count}" +
-                (refreshResult.ErrorCount > 0
-                    ? $"; ошибок чтения: " +
-                      $"{refreshResult.ErrorCount}"
-                    : string.Empty);
+            StatusText = selectedVideoFileFullPath is not null
+                ? files.Count > 0
+                    ? "Выбранный видеофайл"
+                    : "Выбранный видеофайл больше не найден в папке"
+                : $"Видеофайлов: {files.Count}; " +
+                  $"вложенных папок: {childFolders.Count}" +
+                  (refreshResult.ErrorCount > 0
+                      ? $"; ошибок чтения: " +
+                        $"{refreshResult.ErrorCount}"
+                      : string.Empty);
         }
         catch (OperationCanceledException)
             when (currentCancellation.IsCancellationRequested)

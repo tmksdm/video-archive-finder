@@ -1201,8 +1201,35 @@ public partial class MainWindow : Window
 
         SetVideoFilesPanelVisible(true);
 
+        var folderToOpen = selectedFolder;
+
+        if (selectedFolder.IsVideoFile &&
+            selectedFolder.NavigationFolderId is long folderId &&
+            !string.IsNullOrWhiteSpace(
+                selectedFolder.NavigationFolderFullPath))
+        {
+            var folderName = Path.GetFileName(
+                selectedFolder.NavigationFolderFullPath);
+
+            folderToOpen = new FolderSearchTreeNode(
+                Id: folderId,
+                FullPath: selectedFolder.NavigationFolderFullPath,
+                Name: string.IsNullOrWhiteSpace(folderName)
+                    ? selectedFolder.NavigationFolderFullPath
+                    : folderName,
+                RootSourceId: selectedFolder.RootSourceId,
+                IsAvailable: selectedFolder.IsAvailable,
+                IsMatch: false,
+                NameSegments: [],
+                Children: []);
+        }
+
         await viewModel.VideoFiles.SelectFolderAsync(
-            selectedFolder);
+            folderToOpen,
+            selectedVideoFileFullPath:
+                selectedFolder.IsVideoFile
+                    ? selectedFolder.FullPath
+                    : null);
     }
 
     private void EndVideoAreaSelection()
@@ -1291,13 +1318,16 @@ public partial class MainWindow : Window
 
         ResetDragCandidates();
 
-        if (!folder.IsAvailable ||
-            !Directory.Exists(folder.FullPath))
+        var pathExists = folder.IsVideoFile
+            ? File.Exists(folder.FullPath)
+            : Directory.Exists(folder.FullPath);
+
+        if (!folder.IsAvailable || !pathExists)
         {
             if (DataContext is MainWindowViewModel unavailableViewModel)
             {
                 unavailableViewModel.StatusText =
-                    $"Папка недоступна для переноса: {folder.Name}";
+                    $"Объект недоступен для переноса: {folder.Name}";
             }
 
             return true;

@@ -9,4 +9,7 @@ public sealed record FolderSearchResult(
     Guid RootSourceId,
     bool IsAvailable,
     int DirectSubfolderCount,
-    int DirectVideoFileCount);
+    int DirectVideoFileCount,
+    bool IsVideoFile = false,
+    long? NavigationFolderId = null,
+    string? NavigationFolderFullPath = null);

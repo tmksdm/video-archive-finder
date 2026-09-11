@@ -349,7 +349,7 @@ public sealed class FolderIndexingServiceTests
     }
 
     [Fact]
-    public async Task ScanAsync_WhenVideoIndexingIsDisabled_SkipsFiles()
+    public async Task ScanAsync_UsesPerSourceVideoIndexingMode()
     {
         var source =
             ArchiveSource.Create(@"C:\Archive");
@@ -415,6 +415,17 @@ public sealed class FolderIndexingServiceTests
         Assert.Equal(
             0,
             indexedFolder.DirectVideoFileCount);
+
+        var fileSource = ArchiveSource.Create(
+            @"D:\Archive",
+            indexingMode:
+                ArchiveSourceIndexingMode.VideoFileNames);
+
+        await service.ScanAsync(fileSource);
+
+        Assert.Single(discoveryService.RequestedFolderPaths);
+        Assert.Single(videoRepository.Batches);
+        Assert.Single(videoRepository.Completions);
     }
 
     [Fact]

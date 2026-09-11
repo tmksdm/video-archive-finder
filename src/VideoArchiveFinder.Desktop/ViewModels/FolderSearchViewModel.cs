@@ -25,6 +25,7 @@ public partial class FolderSearchViewModel
 
     private CancellationTokenSource? _searchCancellation;
     private IReadOnlyCollection<Guid> _rootSourceIds = [];
+    private IReadOnlyCollection<Guid> _videoFileRootSourceIds = [];
     private int _searchVersion;
     private bool _isDisposed;
 
@@ -40,7 +41,7 @@ public partial class FolderSearchViewModel
 
     [ObservableProperty]
     private string _resultsSummary =
-        "Введите запрос для поиска по папкам";
+        "Введите запрос для поиска";
 
     public FolderSearchViewModel(
         IFolderSearchService folderSearchService,
@@ -91,13 +92,18 @@ public partial class FolderSearchViewModel
     }
 
     public void SetRootSourceIds(
-        IEnumerable<Guid> rootSourceIds)
+        IEnumerable<Guid> rootSourceIds,
+        IEnumerable<Guid>? videoFileRootSourceIds = null)
     {
         ArgumentNullException.ThrowIfNull(rootSourceIds);
 
         _rootSourceIds = rootSourceIds
             .Distinct()
             .ToArray();
+
+        _videoFileRootSourceIds = videoFileRootSourceIds?
+            .Distinct()
+            .ToArray() ?? [];
 
         Results.Clear();
         QueueSearch();
@@ -134,12 +140,13 @@ public partial class FolderSearchViewModel
             Results.Clear();
             IsSearching = false;
             ResultsSummary =
-                "Введите запрос для поиска по папкам";
+                "Введите запрос для поиска";
 
             return;
         }
 
-        if (_rootSourceIds.Count == 0)
+        if (_rootSourceIds.Count == 0 &&
+            _videoFileRootSourceIds.Count == 0)
         {
             Interlocked.CompareExchange(
                 ref _searchCancellation,
@@ -179,7 +186,8 @@ public partial class FolderSearchViewModel
                 SearchText,
                 SearchMode,
                 MaximumDisplayedResults,
-                _rootSourceIds);
+                _rootSourceIds,
+                _videoFileRootSourceIds);
 
             var matches =
                 await _folderSearchService.SearchAsync(
@@ -213,7 +221,7 @@ public partial class FolderSearchViewModel
 
             ResultsSummary = matches.Count == 0
                 ? "Совпадений не найдено"
-                : $"Найдено папок: {matches.Count}";
+                : $"Найдено результатов: {matches.Count}";
         }
         catch (OperationCanceledException)
         {

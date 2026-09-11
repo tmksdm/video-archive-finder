@@ -185,6 +185,10 @@ public sealed class FolderSearchTreeBuilder
             DirectSubfolderCount:
                 folder.DirectSubfolderCount,
             DirectVideoFileCount:
-                folder.DirectVideoFileCount);
+                folder.DirectVideoFileCount,
+            IsVideoFile: folder.IsVideoFile,
+            NavigationFolderId: folder.NavigationFolderId,
+            NavigationFolderFullPath:
+                folder.NavigationFolderFullPath);
     }
 }

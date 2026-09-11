@@ -18,7 +18,27 @@ public sealed class ArchiveSourceServiceTests
         Assert.True(result.WasAdded);
         Assert.Single(store.Sources);
         Assert.Equal(result.Source, store.Sources[0]);
+        Assert.Equal(
+            ArchiveSourceIndexingMode.FolderNames,
+            result.Source.IndexingMode);
         Assert.Equal(1, store.SaveCallCount);
+    }
+
+    [Fact]
+    public async Task AddAsync_WithIndexingMode_SavesMode()
+    {
+        var store = new TestArchiveSourceStore();
+        using var service = new ArchiveSourceService(store);
+
+        var result = await service.AddAsync(
+            @"C:\Video Archive",
+            indexingMode:
+                ArchiveSourceIndexingMode.VideoFileNames);
+
+        Assert.True(result.WasAdded);
+        Assert.Equal(
+            ArchiveSourceIndexingMode.VideoFileNames,
+            result.Source.IndexingMode);
     }
 
     [Fact]

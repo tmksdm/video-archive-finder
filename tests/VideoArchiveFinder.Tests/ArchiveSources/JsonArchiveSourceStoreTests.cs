@@ -34,7 +34,9 @@ public sealed class JsonArchiveSourceStoreTests : IDisposable
                 "окальный архив"),
             ArchiveSource.Create(
                 @"\\media-server\archive",
-                "Сетевой архив")
+                "Сетевой архив",
+                ArchiveSourceIndexingMode
+                    .FolderAndVideoFileNames)
         };
 
         await store.SaveAsync(expectedSources);
@@ -49,6 +51,10 @@ public sealed class JsonArchiveSourceStoreTests : IDisposable
         Assert.Equal(
             expectedSources[1],
             actualSources[1]);
+
+        Assert.Equal(
+            ArchiveSourceIndexingMode.FolderAndVideoFileNames,
+            actualSources[1].IndexingMode);
     }
 
     [Fact]
@@ -67,6 +73,39 @@ public sealed class JsonArchiveSourceStoreTests : IDisposable
         var sources = await store.LoadAsync();
 
         Assert.Empty(sources);
+    }
+
+    [Fact]
+    public async Task LoadAsync_LegacySource_DefaultsToFolderNames()
+    {
+        Directory.CreateDirectory(_temporaryDirectory);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(
+                _temporaryDirectory,
+                "archive-sources.json"),
+            """
+            {
+              "SchemaVersion": 1,
+              "Sources": [
+                {
+                  "Id": "11111111-1111-1111-1111-111111111111",
+                  "DisplayName": "Архив",
+                  "FullPath": "C:\\Archive",
+                  "SourceType": "LocalFolder",
+                  "AddedAtUtc": "2026-01-01T00:00:00+00:00"
+                }
+              ]
+            }
+            """);
+
+        using var store = CreateStore();
+
+        var source = Assert.Single(await store.LoadAsync());
+
+        Assert.Equal(
+            ArchiveSourceIndexingMode.FolderNames,
+            source.IndexingMode);
     }
 
     public void Dispose()

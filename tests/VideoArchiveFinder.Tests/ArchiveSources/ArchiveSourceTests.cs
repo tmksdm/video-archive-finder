@@ -34,6 +34,19 @@ public sealed class ArchiveSourceTests
     }
 
     [Fact]
+    public void Create_WithVideoFileMode_PreservesMode()
+    {
+        var source = ArchiveSource.Create(
+            @"C:\Video Archive",
+            indexingMode:
+                ArchiveSourceIndexingMode.VideoFileNames);
+
+        Assert.Equal(
+            ArchiveSourceIndexingMode.VideoFileNames,
+            source.IndexingMode);
+    }
+
+    [Fact]
     public void Create_RelativePath_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(

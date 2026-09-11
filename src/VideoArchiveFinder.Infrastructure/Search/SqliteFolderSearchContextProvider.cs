@@ -52,7 +52,12 @@ public sealed class SqliteFolderSearchContextProvider
             await using var command = connection.CreateCommand();
 
             var folderIds = matches
-                .Select(match => match.Id)
+                .Select(match =>
+                    match.IsVideoFile
+                        ? match.NavigationFolderId
+                        : match.Id)
+                .Where(folderId => folderId.HasValue)
+                .Select(folderId => folderId!.Value)
                 .Distinct()
                 .ToArray();
 

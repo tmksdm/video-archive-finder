@@ -34,11 +34,14 @@ public sealed class ArchiveSourceService :
     public async Task<AddArchiveSourceResult> AddAsync(
         string fullPath,
         string? displayName = null,
+        ArchiveSourceIndexingMode indexingMode =
+            ArchiveSourceIndexingMode.FolderNames,
         CancellationToken cancellationToken = default)
     {
         var newSource = ArchiveSource.Create(
             fullPath,
-            displayName);
+            displayName,
+            indexingMode);
 
         await _accessLock.WaitAsync(cancellationToken)
             .ConfigureAwait(false);

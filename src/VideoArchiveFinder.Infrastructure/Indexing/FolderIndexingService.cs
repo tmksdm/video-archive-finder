@@ -174,11 +174,14 @@ public sealed class FolderIndexingService
                 discoveredFolderCount++;
 
                 var videoIndexingResult =
-                    _indexVideoFilesDuringFolderScan
+                    (source.IndexingMode.IncludesVideoFileNames() ||
+                     _indexVideoFilesDuringFolderScan)
                         ? await IndexVideoFilesAsync(
                                 folder,
                                 source.Id,
                                 startedAtUtc,
+                                queueAnalysis:
+                                    _indexVideoFilesDuringFolderScan,
                                 cancellationToken)
                             .ConfigureAwait(false)
                         : (
@@ -356,10 +359,11 @@ public sealed class FolderIndexingService
     private async Task<(
         int FileCount,
         int ErrorCount)> IndexVideoFilesAsync(
-            DiscoveredFolder folder,
-            Guid rootSourceId,
-            DateTimeOffset scanStartedAtUtc,
-            CancellationToken cancellationToken)
+        DiscoveredFolder folder,
+        Guid rootSourceId,
+        DateTimeOffset scanStartedAtUtc,
+        bool queueAnalysis,
+        CancellationToken cancellationToken)
     {
         if (!folder.IsAvailable)
         {
@@ -393,35 +397,38 @@ public sealed class FolderIndexingService
 
         var analysisQueueErrorCount = 0;
 
-        foreach (var file in files)
+        if (queueAnalysis)
         {
-            try
+            foreach (var file in files)
             {
-                await _videoFileAnalysisQueue
-                    .EnqueueAsync(
-                        new VideoFileAnalysisRequest(
-                            RootSourceId: rootSourceId,
-                            FullPath: file.FullPath,
-                            SizeBytes: file.SizeBytes,
-                            LastWriteTimeUtc:
-                                file.LastWriteTimeUtc),
-                        cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-                when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception exception)
-            {
-                analysisQueueErrorCount++;
+                try
+                {
+                    await _videoFileAnalysisQueue
+                        .EnqueueAsync(
+                            new VideoFileAnalysisRequest(
+                                RootSourceId: rootSourceId,
+                                FullPath: file.FullPath,
+                                SizeBytes: file.SizeBytes,
+                                LastWriteTimeUtc:
+                                    file.LastWriteTimeUtc),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                    when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    analysisQueueErrorCount++;
 
-                _logger.LogWarning(
-                    exception,
-                    "Cannot enqueue video file {VideoPath} " +
-                    "for background analysis. Indexing will continue.",
-                    file.FullPath);
+                    _logger.LogWarning(
+                        exception,
+                        "Cannot enqueue video file {VideoPath} " +
+                        "for background analysis. Indexing will continue.",
+                        file.FullPath);
+                }
             }
         }
 

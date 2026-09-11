@@ -10,4 +10,7 @@ public sealed record FolderSearchTreeNode(
     IReadOnlyList<FolderNameTextSegment> NameSegments,
     IReadOnlyList<FolderSearchTreeNode> Children,
     int DirectSubfolderCount = 0,
-    int DirectVideoFileCount = 0);
+    int DirectVideoFileCount = 0,
+    bool IsVideoFile = false,
+    long? NavigationFolderId = null,
+    string? NavigationFolderFullPath = null);

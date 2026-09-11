@@ -10,7 +10,9 @@ public sealed record ArchiveSource
         string displayName,
         string fullPath,
         ArchiveSourceType sourceType,
-        DateTimeOffset addedAtUtc)
+        DateTimeOffset addedAtUtc,
+        ArchiveSourceIndexingMode indexingMode =
+            ArchiveSourceIndexingMode.FolderNames)
     {
         if (id == Guid.Empty)
         {
@@ -43,11 +45,20 @@ public sealed record ArchiveSource
                 nameof(sourceType));
         }
 
+        if (!Enum.IsDefined(indexingMode))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(indexingMode),
+                indexingMode,
+                "Unsupported source indexing mode.");
+        }
+
         Id = id;
         DisplayName = displayName.Trim();
         FullPath = normalizedPath;
         SourceType = sourceType;
         AddedAtUtc = addedAtUtc;
+        IndexingMode = indexingMode;
     }
 
     public Guid Id { get; }
@@ -60,9 +71,13 @@ public sealed record ArchiveSource
 
     public DateTimeOffset AddedAtUtc { get; }
 
+    public ArchiveSourceIndexingMode IndexingMode { get; }
+
     public static ArchiveSource Create(
         string fullPath,
-        string? displayName = null)
+        string? displayName = null,
+        ArchiveSourceIndexingMode indexingMode =
+            ArchiveSourceIndexingMode.FolderNames)
     {
         var normalizedPath = NormalizePath(fullPath);
         var sourceType = DetectSourceType(normalizedPath);
@@ -75,7 +90,8 @@ public sealed record ArchiveSource
             resolvedDisplayName,
             normalizedPath,
             sourceType,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            indexingMode);
     }
 
     private static string NormalizePath(string fullPath)

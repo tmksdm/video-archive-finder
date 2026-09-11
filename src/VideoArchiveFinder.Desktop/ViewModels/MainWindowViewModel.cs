@@ -20,6 +20,8 @@ public partial class MainWindowViewModel : ObservableObject
         _archiveSourceAvailabilityChecker;
     private readonly ILocalFolderPicker _localFolderPicker;
     private readonly IUncPathInputDialog _uncPathInputDialog;
+    private readonly IArchiveSourceIndexingModeDialog
+        _archiveSourceIndexingModeDialog;
     private readonly IArchiveSourceRemovalConfirmationDialog
         _archiveSourceRemovalConfirmationDialog;
     private readonly IFolderIndexingService _folderIndexingService;
@@ -74,6 +76,8 @@ public partial class MainWindowViewModel : ObservableObject
         IArchiveSourceAvailabilityChecker archiveSourceAvailabilityChecker,
         ILocalFolderPicker localFolderPicker,
         IUncPathInputDialog uncPathInputDialog,
+        IArchiveSourceIndexingModeDialog
+            archiveSourceIndexingModeDialog,
         IArchiveSourceRemovalConfirmationDialog
             archiveSourceRemovalConfirmationDialog,
 IFolderIndexingService folderIndexingService,
@@ -94,6 +98,8 @@ ILogger<MainWindowViewModel> logger)
             archiveSourceAvailabilityChecker;
         _localFolderPicker = localFolderPicker;
         _uncPathInputDialog = uncPathInputDialog;
+        _archiveSourceIndexingModeDialog =
+            archiveSourceIndexingModeDialog;
         _archiveSourceRemovalConfirmationDialog =
             archiveSourceRemovalConfirmationDialog;
         _folderIndexingService = folderIndexingService;
@@ -192,7 +198,7 @@ ILogger<MainWindowViewModel> logger)
                 return;
             }
 
-            await AddSourceAsync(selectedPath);
+            await AddSourceWithModeAsync(selectedPath);
         }
         catch (Exception exception)
         {
@@ -220,7 +226,7 @@ ILogger<MainWindowViewModel> logger)
                 return;
             }
 
-            await AddSourceAsync(enteredPath);
+            await AddSourceWithModeAsync(enteredPath);
         }
         catch (Exception exception)
         {
@@ -622,11 +628,29 @@ ILogger<MainWindowViewModel> logger)
 
 
 
-    private async Task AddSourceAsync(string fullPath)
+    private async Task AddSourceWithModeAsync(string fullPath)
+    {
+        var indexingMode =
+            _archiveSourceIndexingModeDialog.ShowDialog(fullPath);
+
+        if (indexingMode is null)
+        {
+            StatusText = "Добавление источника отменено";
+            return;
+        }
+
+        await AddSourceAsync(fullPath, indexingMode.Value);
+    }
+
+    private async Task AddSourceAsync(
+        string fullPath,
+        ArchiveSourceIndexingMode indexingMode)
     {
         StatusText = "Добавление источника архива...";
 
-        var result = await _archiveSourceService.AddAsync(fullPath);
+        var result = await _archiveSourceService.AddAsync(
+            fullPath,
+            indexingMode: indexingMode);
 
         if (!result.WasAdded)
         {
@@ -687,7 +711,14 @@ ILogger<MainWindowViewModel> logger)
             .ToArray();
 
         Search.SetRootSourceIds(
-            includedSources.Select(source => source.Id));
+            includedSources
+                .Where(source =>
+                    source.IndexingMode.IncludesFolderNames())
+                .Select(source => source.Id),
+            includedSources
+                .Where(source =>
+                    source.IndexingMode.IncludesVideoFileNames())
+                .Select(source => source.Id));
 
         SearchSourceScopeText = includedSources.Length switch
         {

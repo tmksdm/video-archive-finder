@@ -561,9 +561,9 @@ StateChanged="MainWindow_StateChanged"
 
                                                     <Separator/>
 
-                                                    <MenuItem Header="Индексировать папки"
-          ToolTip="Запустить или повторить индексирование папок источника"
-          AutomationProperties.Name="Индексировать папки источника"
+                                                    <MenuItem Header="Индексировать источник"
+          ToolTip="Запустить или повторить индексирование источника"
+          AutomationProperties.Name="Индексировать источник"
           Command="{Binding PlacementTarget.Tag.StartIndexingCommand,
                             RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
           CommandParameter="{Binding PlacementTarget.DataContext,
@@ -682,7 +682,13 @@ StateChanged="MainWindow_StateChanged"
                            Foreground="{DynamicResource AppMutedTextBrush}"
                            FontSize="12"
                            Text="{Binding SourceTypeShortText}"
-                           ToolTip="{Binding SourceTypeText}"/>
+                                                   ToolTip="{Binding SourceTypeText}"/>
+
+                                                <TextBlock Margin="8,0,0,0"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource AppMutedTextBrush}"
+                                                           FontSize="12"
+                                                           Text="{Binding IndexingModeText}"/>
 
                                                 <TextBlock Margin="8,0,5,0"
                            VerticalAlignment="Center"
@@ -907,18 +913,21 @@ Text="{Binding IndexingStatusText}"
                                                             <Setter Property="Foreground"
         Value="{DynamicResource AppMutedTextBrush}"/>
 
-
                                                             <Style.Triggers>
-                                                                <DataTrigger
-                                        Binding="{Binding IsMatch}"
-                                        Value="True">
-                                                                    <Setter Property="Kind"
-                                                Value="FolderSearchOutline"/>
+                                                                <DataTrigger Binding="{Binding IsMatch}"
+                                                                             Value="True">
+                                                                    <Setter Property="Kind" Value="FolderSearchOutline"/>
                                                                     <Setter Property="Foreground"
-        Value="{DynamicResource AppSelectionAccentBrush}"/>
-
+                                                                            Value="{DynamicResource AppSelectionAccentBrush}"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding IsVideoFile}"
+                                                                             Value="True">
+                                                                    <Setter Property="Kind" Value="FileVideoOutline"/>
+                                                                    <Setter Property="Foreground"
+                                                                            Value="{DynamicResource AppSelectionAccentBrush}"/>
                                                                 </DataTrigger>
                                                             </Style.Triggers>
+
                                                         </Style>
                                                     </materialDesign:PackIcon.Style>
                                                 </materialDesign:PackIcon>
@@ -1130,9 +1139,9 @@ Text="{Binding IndexingStatusText}"
                VerticalAlignment="Center"
                FontSize="17"
                FontWeight="SemiBold"
-               Text="{Binding VideoFiles.SelectedFolder.Name}"
+               Text="{Binding VideoFiles.SelectedContentName}"
                TextTrimming="CharacterEllipsis"
-               ToolTip="{Binding VideoFiles.SelectedFolder.Name}"/>
+               ToolTip="{Binding VideoFiles.SelectedContentName}"/>
 
                                     <Slider Grid.Column="3"
         Width="120"
@@ -1186,9 +1195,9 @@ Text="{Binding IndexingStatusText}"
                    Margin="0,3,0,0"
                    FontSize="12"
                    Foreground="{DynamicResource AppMutedTextBrush}"
-                   Text="{Binding VideoFiles.SelectedFolder.FullPath}"
+                   Text="{Binding VideoFiles.SelectedContentPath}"
                    TextTrimming="CharacterEllipsis"
-                   ToolTip="{Binding VideoFiles.SelectedFolder.FullPath}"/>
+                   ToolTip="{Binding VideoFiles.SelectedContentPath}"/>
 
                                 <TextBlock Grid.Row="2"
                    Margin="0,5,0,8"

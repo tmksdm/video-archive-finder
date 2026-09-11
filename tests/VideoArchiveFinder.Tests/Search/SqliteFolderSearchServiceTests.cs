@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using VideoArchiveFinder.Application.Indexing;
 using VideoArchiveFinder.Application.Search;
 using VideoArchiveFinder.Application.Storage;
+using VideoArchiveFinder.Application.VideoFiles;
 using VideoArchiveFinder.Infrastructure.Indexing;
 using VideoArchiveFinder.Infrastructure.Search;
 
@@ -382,6 +383,99 @@ public sealed class SqliteFolderSearchServiceTests
     }
 
     [Fact]
+    public async Task SearchAsync_MixesFolderAndVideoFileSourceScopes()
+    {
+        var context = await CreateContextAsync();
+        var fileSourceId = Guid.NewGuid();
+        var folderSourcePath = Path.Combine(
+            _temporaryDirectory,
+            "FolderSource");
+        var fileSourcePath = Path.Combine(
+            _temporaryDirectory,
+            "FileSource");
+
+        await context.Repository.UpsertBatchAsync(
+        [
+            CreateFolder(
+                context,
+                folderSourcePath,
+                "Велосипедная прогулка"),
+            CreateFolder(
+                context,
+                fileSourcePath,
+                "Велосипедная папка") with
+            {
+                RootSourceId = fileSourceId
+            }
+        ]);
+
+        await context.VideoRepository.UpsertBatchAsync(
+        [
+            CreateVideo(
+                context,
+                folderSourcePath,
+                context.RootSourceId,
+                "Велосипед из папочного источника.mp4"),
+            CreateVideo(
+                context,
+                fileSourcePath,
+                fileSourceId,
+                "Велосипед у моря.mp4")
+        ]);
+
+        var results = await context.SearchService.SearchAsync(
+            new FolderSearchQuery(
+                "велосипед",
+                FolderSearchMode.Smart,
+                RootSourceIds: [context.RootSourceId],
+                VideoFileRootSourceIds: [fileSourceId]));
+
+        Assert.Equal(2, results.Count);
+        Assert.Contains(
+            results,
+            result =>
+                !result.IsVideoFile &&
+                result.Name == "Велосипедная прогулка" &&
+                result.RootSourceId == context.RootSourceId);
+        Assert.Contains(
+            results,
+            result =>
+                result.IsVideoFile &&
+                result.Name == "Велосипед у моря.mp4" &&
+                result.RootSourceId == fileSourceId &&
+                result.NavigationFolderFullPath == fileSourcePath);
+        Assert.DoesNotContain(
+            results,
+            result => result.Name == "Велосипедная папка");
+        Assert.DoesNotContain(
+            results,
+            result => result.Name.Contains("папочного источника"));
+
+        var contextFolders =
+            await context.ContextProvider.GetContextFoldersAsync(results);
+
+        var tree = new FolderSearchTreeBuilder(
+                new FolderNameHighlightService(
+                    context.NormalizationService,
+                    context.StemService))
+            .Build(
+                results,
+                contextFolders,
+                "велосипед");
+
+        Assert.Contains(
+            tree,
+            node =>
+                node.Name == "Велосипедная прогулка" &&
+                !node.IsVideoFile);
+        Assert.Contains(
+            tree.SelectMany(node => node.Children),
+            node =>
+                node.Name == "Велосипед у моря.mp4" &&
+                node.IsVideoFile);
+    }
+
+    [Fact]
     public async Task SearchAsync_WhitespaceQuery_ReturnsEmptyResult()
     {
         var context = await CreateContextAsync();
@@ -458,6 +552,12 @@ public sealed class SqliteFolderSearchServiceTests
                 NullLogger<
                     SqliteFolderIndexRepository>.Instance);
 
+        var videoRepository =
+            new SqliteVideoFileIndexRepository(
+                databasePathProvider,
+                NullLogger<
+                    SqliteVideoFileIndexRepository>.Instance);
+
         var normalizationService =
             new TextNormalizationService();
 
@@ -472,12 +572,40 @@ public sealed class SqliteFolderSearchServiceTests
                 NullLogger<
                     SqliteFolderSearchService>.Instance);
 
+        var contextProvider =
+            new SqliteFolderSearchContextProvider(
+                databasePathProvider,
+                NullLogger<
+                    SqliteFolderSearchContextProvider>.Instance);
+
         return new SearchTestContext(
             repository,
+            videoRepository,
             searchService,
+            contextProvider,
             normalizationService,
             stemService,
             Guid.NewGuid());
+    }
+
+    private static VideoFileIndexUpsertItem CreateVideo(
+        SearchTestContext context,
+        string folderFullPath,
+        Guid rootSourceId,
+        string name)
+    {
+        return new VideoFileIndexUpsertItem(
+            FullPath: Path.Combine(folderFullPath, name),
+            Name: name,
+            NormalizedName:
+                context.NormalizationService.Normalize(name),
+            Extension: Path.GetExtension(name),
+            SizeBytes: 1_000,
+            LastWriteTimeUtc: DateTimeOffset.UtcNow,
+            FolderFullPath: folderFullPath,
+            RootSourceId: rootSourceId,
+            IsAvailable: true,
+            LastSeenUtc: DateTimeOffset.UtcNow);
     }
 
     private async Task AddFoldersAsync(
@@ -540,7 +668,9 @@ public sealed class SqliteFolderSearchServiceTests
 
     private sealed record SearchTestContext(
         SqliteFolderIndexRepository Repository,
+        SqliteVideoFileIndexRepository VideoRepository,
         SqliteFolderSearchService SearchService,
+        SqliteFolderSearchContextProvider ContextProvider,
         ITextNormalizationService NormalizationService,
         ISearchStemService StemService,
         Guid RootSourceId);

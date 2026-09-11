@@ -23,6 +23,7 @@ public sealed partial class ArchiveSourceItemViewModel :
         DisplayName = source.DisplayName;
         FullPath = source.FullPath;
         SourceType = source.SourceType;
+        IndexingMode = source.IndexingMode;
     }
 
     public ArchiveSource Source { get; }
@@ -34,6 +35,17 @@ public sealed partial class ArchiveSourceItemViewModel :
     public string FullPath { get; }
 
     public ArchiveSourceType SourceType { get; }
+
+    public ArchiveSourceIndexingMode IndexingMode { get; }
+
+    public string IndexingModeText => IndexingMode switch
+    {
+        ArchiveSourceIndexingMode.FolderNames => "Поиск по папкам",
+        ArchiveSourceIndexingMode.VideoFileNames => "Поиск по файлам",
+        ArchiveSourceIndexingMode.FolderAndVideoFileNames =>
+            "Поиск по папкам и файлам",
+        _ => "Неизвестный режим поиска"
+    };
 
     [ObservableProperty]
     private bool _isIncludedInSearch = true;

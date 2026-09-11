@@ -219,6 +219,45 @@ public sealed class FolderSearchTreeBuilderTests
     }
 
     [Fact]
+    public void Build_ShowsVideoFileAsLeafUnderContainingFolder()
+    {
+        var root = CreateFolder(id: 1, name: "Архив");
+        var folder = CreateFolder(
+            id: 2,
+            name: "Поездки",
+            parentFolderId: root.Id);
+
+        var file = new FolderSearchResult(
+            Id: -10,
+            FullPath: @"C:\Archive\Поездки\Велосипед.mp4",
+            Name: "Велосипед.mp4",
+            NormalizedName: "велосипед.mp4",
+            ParentFolderId: folder.Id,
+            RootSourceId: DefaultSourceId,
+            IsAvailable: true,
+            DirectSubfolderCount: 0,
+            DirectVideoFileCount: 0,
+            IsVideoFile: true,
+            NavigationFolderId: folder.Id,
+            NavigationFolderFullPath: folder.FullPath);
+
+        var result = _builder.Build(
+            matches: [file],
+            availableFolders: [root, folder],
+            queryText: "велосипед");
+
+        var fileNode = Assert.Single(
+            Assert.Single(
+                Assert.Single(result).Children).Children);
+
+        Assert.True(fileNode.IsMatch);
+        Assert.True(fileNode.IsVideoFile);
+        Assert.Equal("Велосипед.mp4", fileNode.Name);
+        Assert.Equal(folder.FullPath, fileNode.NavigationFolderFullPath);
+        Assert.Empty(fileNode.Children);
+    }
+
+    [Fact]
     public void Build_AddsSmartHighlightToMatchingNode()
     {
         var root = CreateFolder(

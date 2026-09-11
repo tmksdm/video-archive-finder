@@ -10,6 +10,8 @@ public interface IArchiveSourceService
     Task<AddArchiveSourceResult> AddAsync(
         string fullPath,
         string? displayName = null,
+        ArchiveSourceIndexingMode indexingMode =
+            ArchiveSourceIndexingMode.FolderNames,
         CancellationToken cancellationToken = default);
 
     Task<bool> RemoveAsync(

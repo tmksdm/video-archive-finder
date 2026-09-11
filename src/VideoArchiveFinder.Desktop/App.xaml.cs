@@ -57,6 +57,9 @@ public partial class App : System.Windows.Application
                     IUncPathInputDialog,
                     WindowsUncPathInputDialog>();
                 services.AddSingleton<
+                    IArchiveSourceIndexingModeDialog,
+                    WindowsArchiveSourceIndexingModeDialog>();
+                services.AddSingleton<
                     IArchiveSourceRemovalConfirmationDialog,
                     WindowsArchiveSourceRemovalConfirmationDialog>();
                 services.AddSingleton<FolderSearchViewModel>();
