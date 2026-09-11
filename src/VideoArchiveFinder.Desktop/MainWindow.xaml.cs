@@ -34,6 +34,9 @@ public partial class MainWindow : Window
     private readonly IWindowsShellService
         _windowsShellService;
 
+    private readonly IUserSettingsStore
+        _userSettingsStore;
+
     private readonly Microsoft.Extensions.Logging
         .ILogger<CacheSettingsDialog>
         _cacheDialogLogger;
@@ -74,12 +77,19 @@ public partial class MainWindow : Window
 
     private HwndSource? _windowSource;
 
+    private Rect _normalBoundsAtClose;
+
+    private bool _isWindowMaximizedAtClose;
+
+    private bool _hasCapturedWindowPlacement;
+
 
     public MainWindow(
         MainWindowViewModel viewModel,
         IAppThemeService appThemeService,
         IThumbnailCacheService thumbnailCacheService,
         IWindowsShellService windowsShellService,
+        IUserSettingsStore userSettingsStore,
         ILibVlcRuntimeLocator libVlcRuntimeLocator,
         Microsoft.Extensions.Logging.ILogger<MainWindow>
             hoverScrubLogger,
@@ -89,6 +99,7 @@ public partial class MainWindow : Window
         _appThemeService = appThemeService;
         _thumbnailCacheService = thumbnailCacheService;
         _windowsShellService = windowsShellService;
+        _userSettingsStore = userSettingsStore;
         _libVlcRuntimeLocator = libVlcRuntimeLocator;
         _hoverScrubLogger = hoverScrubLogger;
         _cacheDialogLogger = cacheDialogLogger;
@@ -103,6 +114,9 @@ public partial class MainWindow : Window
 
         Closed +=
             MainWindow_Closed;
+
+        Closing +=
+            MainWindow_Closing;
 
         SourceInitialized +=
             MainWindow_SourceInitialized;
@@ -143,6 +157,120 @@ public partial class MainWindow : Window
         EventArgs e)
     {
         UpdateCaptionState();
+    }
+
+    public void ApplyWindowSettings(UserSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        var normalizedSettings = settings.Normalize();
+
+        Width = normalizedSettings.WindowWidth;
+        Height = normalizedSettings.WindowHeight;
+
+        _videoModeSearchResultsWidth = new GridLength(
+            normalizedSettings.SearchResultsPanelFraction,
+            GridUnitType.Star);
+
+        _videoModeVideoFilesWidth = new GridLength(
+            1 - normalizedSettings.SearchResultsPanelFraction,
+            GridUnitType.Star);
+
+        if (normalizedSettings.WindowLeft is { } left &&
+            normalizedSettings.WindowTop is { } top &&
+            IsVisibleOnAnyScreen(
+                left,
+                top,
+                normalizedSettings.WindowWidth,
+                normalizedSettings.WindowHeight))
+        {
+            WindowStartupLocation =
+                WindowStartupLocation.Manual;
+
+            Left = left;
+            Top = top;
+        }
+
+        WindowState = normalizedSettings.IsWindowMaximized
+            ? WindowState.Maximized
+            : WindowState.Normal;
+    }
+
+    public UserSettings AddWindowSettings(
+        UserSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        var bounds = _hasCapturedWindowPlacement
+            ? _normalBoundsAtClose
+            : GetNormalWindowBounds();
+
+        var isMaximized = _hasCapturedWindowPlacement
+            ? _isWindowMaximizedAtClose
+            : WindowState == WindowState.Maximized;
+
+        RememberVideoModeColumnWidths();
+
+        var totalPanelWidth =
+            _videoModeSearchResultsWidth.Value +
+            _videoModeVideoFilesWidth.Value;
+
+        var searchResultsPanelFraction =
+            totalPanelWidth > 0
+                ? _videoModeSearchResultsWidth.Value /
+                  totalPanelWidth
+                : UserSettings
+                    .DefaultSearchResultsPanelFraction;
+
+        return settings with
+        {
+            WindowLeft = bounds.Left,
+            WindowTop = bounds.Top,
+            WindowWidth = bounds.Width,
+            WindowHeight = bounds.Height,
+            IsWindowMaximized = isMaximized,
+            SearchResultsPanelFraction =
+                searchResultsPanelFraction
+        };
+    }
+
+    private void SearchTextBox_PreviewMouseLeftButtonDown(
+        object sender,
+        MouseButtonEventArgs e)
+    {
+        if (sender is not TextBox textBox ||
+            textBox.IsKeyboardFocusWithin)
+        {
+            return;
+        }
+
+        textBox.Focus();
+        textBox.SelectAll();
+        e.Handled = true;
+    }
+
+    private void SearchTextBox_TextChanged(
+        object sender,
+        TextChangedEventArgs e)
+    {
+        if (ClearSearchButton is null ||
+            sender is not TextBox textBox)
+        {
+            return;
+        }
+
+        ClearSearchButton.Visibility =
+            string.IsNullOrEmpty(textBox.Text)
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+    }
+
+    private void ClearSearchButton_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        SearchTextBox.Clear();
+        SearchTextBox.Focus();
     }
 
     private void MainWindow_SourceInitialized(
@@ -371,8 +499,86 @@ public partial class MainWindow : Window
         Closed -=
             MainWindow_Closed;
 
+        Closing -=
+            MainWindow_Closing;
+
         SourceInitialized -=
             MainWindow_SourceInitialized;
+    }
+
+    private void MainWindow_Closing(
+        object? sender,
+        System.ComponentModel.CancelEventArgs e)
+    {
+        _normalBoundsAtClose = GetNormalWindowBounds();
+        _isWindowMaximizedAtClose =
+            WindowState == WindowState.Maximized;
+        _hasCapturedWindowPlacement = true;
+
+        SaveInterfaceSettings();
+    }
+
+    private void SaveInterfaceSettings()
+    {
+        try
+        {
+            var settings = _userSettingsStore
+                .LoadAsync()
+                .GetAwaiter()
+                .GetResult();
+
+            if (DataContext is MainWindowViewModel viewModel)
+            {
+                settings = viewModel.VideoFiles
+                    .AddSettings(settings);
+            }
+
+            settings = AddWindowSettings(settings);
+
+            _userSettingsStore
+                .SaveAsync(settings)
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (Exception exception)
+        {
+            Microsoft.Extensions.Logging.LoggerExtensions
+                .LogWarning(
+                _hoverScrubLogger,
+                exception,
+                "Interface settings could not be saved while closing the window.");
+        }
+    }
+
+    private Rect GetNormalWindowBounds()
+    {
+        return WindowState == WindowState.Normal
+            ? new Rect(Left, Top, Width, Height)
+            : RestoreBounds;
+    }
+
+    private static bool IsVisibleOnAnyScreen(
+        double left,
+        double top,
+        double width,
+        double height)
+    {
+        var savedBounds = new Rect(
+            left,
+            top,
+            width,
+            height);
+
+        var virtualScreen = new Rect(
+            SystemParameters.VirtualScreenLeft,
+            SystemParameters.VirtualScreenTop,
+            SystemParameters.VirtualScreenWidth,
+            SystemParameters.VirtualScreenHeight);
+
+        savedBounds.Intersect(virtualScreen);
+
+        return savedBounds.Width >= 64 &&
+            savedBounds.Height >= 64;
     }
 
 

@@ -240,14 +240,36 @@ StateChanged="MainWindow_StateChanged"
 
 
 
-                    <TextBox Grid.Column="0"
-                         Height="40"
-                         Padding="12,6"
-                         VerticalContentAlignment="Center"
-                         FontSize="16"
-Text="{Binding Search.SearchText,
-               UpdateSourceTrigger=PropertyChanged}"
-                         ToolTip="Поиск по названиям папок"/>
+                    <Grid Grid.Column="0">
+                        <TextBox x:Name="SearchTextBox"
+                                 Height="40"
+                                 Padding="12,6,40,6"
+                                 VerticalContentAlignment="Center"
+                                 FontSize="16"
+                                 Text="{Binding Search.SearchText,
+                                                UpdateSourceTrigger=PropertyChanged}"
+                                 PreviewMouseLeftButtonDown="SearchTextBox_PreviewMouseLeftButtonDown"
+                                 TextChanged="SearchTextBox_TextChanged"
+                                 ToolTip="Поиск по названиям папок"
+                                 AutomationProperties.Name="Поисковый запрос"/>
+
+                        <Button x:Name="ClearSearchButton"
+                                Width="32"
+                                Height="32"
+                                Margin="0,4,4,4"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Click="ClearSearchButton_Click"
+                                ToolTip="Очистить поиск"
+                                AutomationProperties.Name="Очистить поиск"
+                                Visibility="Collapsed">
+                            <materialDesign:PackIcon Width="18"
+                                                     Height="18"
+                                                     Kind="Close"/>
+                        </Button>
+                    </Grid>
 
                     <ComboBox Grid.Column="1"
           Width="160"

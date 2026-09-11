@@ -49,7 +49,14 @@ public sealed class JsonUserSettingsStoreTests
             GridCardWidth = 285,
 
             ThemeMode =
-                AppThemeMode.Dark
+                AppThemeMode.Dark,
+
+            WindowLeft = 120,
+            WindowTop = 75,
+            WindowWidth = 1500,
+            WindowHeight = 950,
+            IsWindowMaximized = true,
+            SearchResultsPanelFraction = 0.4
         };
 
         await store.SaveAsync(expected);
@@ -68,6 +75,17 @@ public sealed class JsonUserSettingsStoreTests
         Assert.Equal(
             expected.ThemeMode,
             actual.ThemeMode);
+
+        Assert.Equal(expected.WindowLeft, actual.WindowLeft);
+        Assert.Equal(expected.WindowTop, actual.WindowTop);
+        Assert.Equal(expected.WindowWidth, actual.WindowWidth);
+        Assert.Equal(expected.WindowHeight, actual.WindowHeight);
+        Assert.Equal(
+            expected.IsWindowMaximized,
+            actual.IsWindowMaximized);
+        Assert.Equal(
+            expected.SearchResultsPanelFraction,
+            actual.SearchResultsPanelFraction);
 
         Assert.True(
             File.Exists(

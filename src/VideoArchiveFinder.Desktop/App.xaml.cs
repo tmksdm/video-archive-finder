@@ -138,6 +138,14 @@ public partial class App : System.Windows.Application
         var mainWindow =
             _host.Services.GetRequiredService<MainWindow>();
 
+        var userSettingsStore =
+            _host.Services.GetRequiredService<
+                VideoArchiveFinder.Application.Settings
+                    .IUserSettingsStore>();
+
+        mainWindow.ApplyWindowSettings(
+            await userSettingsStore.LoadAsync());
+
         MainWindow = mainWindow;
         mainWindow.Show();
 
@@ -169,14 +177,6 @@ public partial class App : System.Windows.Application
             }
 
             _cacheMaintenanceCancellation?.Dispose();
-
-            var viewModel =
-                _host.Services.GetService<MainWindowViewModel>();
-
-            if (viewModel is not null)
-            {
-                await viewModel.VideoFiles.SaveSettingsAsync();
-            }
 
             await _host.StopAsync();
             _host.Dispose();

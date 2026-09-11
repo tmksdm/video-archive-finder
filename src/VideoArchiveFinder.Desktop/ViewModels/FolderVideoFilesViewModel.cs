@@ -177,16 +177,7 @@ public partial class FolderVideoFilesViewModel
                 await _userSettingsStore.LoadAsync(
                     cancellationToken);
 
-            var settings = currentSettings with
-            {
-                VideoFilesViewMode =
-                    IsGridView
-                        ? VideoFilesViewMode.Grid
-                        : VideoFilesViewMode.List,
-
-                GridCardWidth =
-                    GridCardWidth
-            };
+            var settings = AddSettings(currentSettings);
 
             await _userSettingsStore.SaveAsync(
                 settings,
@@ -203,6 +194,22 @@ public partial class FolderVideoFilesViewModel
                 exception,
                 "Could not save video view settings.");
         }
+    }
+
+    public UserSettings AddSettings(
+        UserSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        return settings with
+        {
+            VideoFilesViewMode =
+                IsGridView
+                    ? VideoFilesViewMode.Grid
+                    : VideoFilesViewMode.List,
+
+            GridCardWidth = GridCardWidth
+        };
     }
 
 
