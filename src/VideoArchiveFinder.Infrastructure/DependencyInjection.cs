@@ -176,6 +176,10 @@ public static class DependencyInjection
             SqliteFolderSearchService>();
 
         services.AddSingleton<
+            IFolderSearchPageService,
+            SqliteFolderSearchPageService>();
+
+        services.AddSingleton<
             IFolderSearchContextProvider,
             SqliteFolderSearchContextProvider>();
 
