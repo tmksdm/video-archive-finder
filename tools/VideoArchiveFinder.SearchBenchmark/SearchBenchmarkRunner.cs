@@ -80,11 +80,12 @@ internal sealed class SearchBenchmarkRunner
 
         _searchService =
             new SqliteFolderSearchService(
-                _databasePathProvider,
-                _normalizationService,
-                _stemService,
-                NullLogger<
-                    SqliteFolderSearchService>.Instance);
+                new SqliteFolderSearchPageService(
+                    _databasePathProvider,
+                    _normalizationService,
+                    _stemService,
+                    NullLogger<
+                        SqliteFolderSearchPageService>.Instance));
     }
 
     public async Task RunAsync(

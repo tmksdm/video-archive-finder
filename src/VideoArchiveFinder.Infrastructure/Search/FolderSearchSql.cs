@@ -396,14 +396,23 @@ public static class FolderSearchSql
             conditions);
     }
 
+    /// <summary>
+    /// Фильтр по источникам. <c>null</c> означает «без ограничения по источникам» —
+    /// так же, как в прежнем поиске, условие не добавляется вовсе; пустая
+    /// коллекция даёт заведомо ложное условие и ни одного совпадения не находит.
+    /// </summary>
     public static string BuildRootSourceIdFilter(
         string columnName,
-        IReadOnlyCollection<Guid> rootSourceIds,
+        IReadOnlyCollection<Guid>? rootSourceIds,
         string parameterPrefix)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(columnName);
-        ArgumentNullException.ThrowIfNull(rootSourceIds);
         ArgumentException.ThrowIfNullOrWhiteSpace(parameterPrefix);
+
+        if (rootSourceIds is null)
+        {
+            return string.Empty;
+        }
 
         return $"{columnName} IN ({string.Join(", ",
             Enumerable.Range(0, rootSourceIds.Count)
@@ -431,20 +440,6 @@ public static class FolderSearchSql
     }
 
     /// <summary>
-    /// Прежний запрос по папкам: без постраничной выборки, с ограничением
-    /// количества результатов.
-    /// </summary>
-    public static string BuildFolderSelectCommand(
-        string searchCondition,
-        IReadOnlyCollection<Guid>? rootSourceIds)
-    {
-        return BuildFolderSelectCommandCore(
-            searchCondition,
-            rootSourceIds,
-            "LIMIT $maxResults;");
-    }
-
-    /// <summary>
     /// Эталонный запрос по папкам: тот же фильтр и тот же порядок, но выборка
     /// через <c>OFFSET</c>. Используется тестами как независимый эталон.
     /// </summary>
@@ -452,24 +447,10 @@ public static class FolderSearchSql
         string searchCondition,
         IReadOnlyCollection<Guid>? rootSourceIds)
     {
-        return BuildFolderSelectCommandCore(
+        return BuildFolderOffsetCommandCore(
             searchCondition,
             rootSourceIds,
             "LIMIT $pageSize OFFSET $offset;");
-    }
-
-    /// <summary>
-    /// Прежний запрос по видеофайлам: без постраничной выборки, с ограничением
-    /// количества результатов.
-    /// </summary>
-    public static string BuildVideoSelectCommand(
-        string searchCondition,
-        IReadOnlyCollection<Guid> rootSourceIds)
-    {
-        return BuildVideoSelectCommandCore(
-            searchCondition,
-            rootSourceIds,
-            "LIMIT $maxResults;");
     }
 
     /// <summary>
@@ -478,9 +459,9 @@ public static class FolderSearchSql
     /// </summary>
     public static string BuildVideoOffsetCommand(
         string searchCondition,
-        IReadOnlyCollection<Guid> rootSourceIds)
+        IReadOnlyCollection<Guid>? rootSourceIds)
     {
-        return BuildVideoSelectCommandCore(
+        return BuildVideoOffsetCommandCore(
             searchCondition,
             rootSourceIds,
             "LIMIT $pageSize OFFSET $offset;");
@@ -537,7 +518,7 @@ public static class FolderSearchSql
     /// </summary>
     public static string BuildVideoPageCommand(
         string searchCondition,
-        IReadOnlyCollection<Guid> rootSourceIds)
+        IReadOnlyCollection<Guid>? rootSourceIds)
     {
         var commandText = new StringBuilder();
 
@@ -552,11 +533,16 @@ public static class FolderSearchSql
         commandText.AppendLine(Indent(VideoFromClause));
         commandText.AppendLine("    WHERE " + searchCondition);
         commandText.AppendLine("      AND v.IsAvailable = 1");
-        commandText.AppendLine(
-            "      AND " + BuildRootSourceIdFilter(
-                "v.RootSourceId",
-                rootSourceIds,
-                "videoRootSourceId"));
+
+        if (rootSourceIds is not null)
+        {
+            commandText.AppendLine(
+                "      AND " + BuildRootSourceIdFilter(
+                    "v.RootSourceId",
+                    rootSourceIds,
+                    "videoRootSourceId"));
+        }
+
         commandText.AppendLine(")");
         commandText.AppendLine("SELECT");
         commandText.AppendLine("    Id,");
@@ -678,7 +664,7 @@ public static class FolderSearchSql
                $cursorId)
         """;
 
-    private static string BuildFolderSelectCommandCore(
+    private static string BuildFolderOffsetCommandCore(
         string searchCondition,
         IReadOnlyCollection<Guid>? rootSourceIds,
         string limitClause)
@@ -711,9 +697,9 @@ public static class FolderSearchSql
         return commandText.ToString();
     }
 
-    private static string BuildVideoSelectCommandCore(
+    private static string BuildVideoOffsetCommandCore(
         string searchCondition,
-        IReadOnlyCollection<Guid> rootSourceIds,
+        IReadOnlyCollection<Guid>? rootSourceIds,
         string limitClause)
     {
         var commandText = new StringBuilder();
@@ -723,11 +709,16 @@ public static class FolderSearchSql
         commandText.AppendLine(VideoFromClause);
         commandText.AppendLine("WHERE " + searchCondition);
         commandText.AppendLine("  AND v.IsAvailable = 1");
-        commandText.AppendLine(
-            "  AND " + BuildRootSourceIdFilter(
-                "v.RootSourceId",
-                rootSourceIds,
-                "videoRootSourceId"));
+
+        if (rootSourceIds is not null)
+        {
+            commandText.AppendLine(
+                "  AND " + BuildRootSourceIdFilter(
+                    "v.RootSourceId",
+                    rootSourceIds,
+                    "videoRootSourceId"));
+        }
+
         commandText.AppendLine("ORDER BY");
         commandText.AppendLine(
             BuildVideoOrderBy(

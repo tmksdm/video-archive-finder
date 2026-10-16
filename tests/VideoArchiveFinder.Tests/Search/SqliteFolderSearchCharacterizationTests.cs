@@ -656,11 +656,12 @@ public sealed class SqliteFolderSearchCharacterizationTests
 
         var searchService =
             new SqliteFolderSearchService(
-                databasePathProvider,
-                normalizationService,
-                stemService,
-                NullLogger<
-                    SqliteFolderSearchService>.Instance);
+                new SqliteFolderSearchPageService(
+                    databasePathProvider,
+                    normalizationService,
+                    stemService,
+                    NullLogger<
+                        SqliteFolderSearchPageService>.Instance));
 
         var videoFolderPath = Path.Combine(
             _temporaryDirectory,

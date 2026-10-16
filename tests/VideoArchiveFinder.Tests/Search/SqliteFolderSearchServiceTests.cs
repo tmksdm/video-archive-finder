@@ -566,11 +566,12 @@ public sealed class SqliteFolderSearchServiceTests
 
         var searchService =
             new SqliteFolderSearchService(
-                databasePathProvider,
-                normalizationService,
-                stemService,
-                NullLogger<
-                    SqliteFolderSearchService>.Instance);
+                new SqliteFolderSearchPageService(
+                    databasePathProvider,
+                    normalizationService,
+                    stemService,
+                    NullLogger<
+                        SqliteFolderSearchPageService>.Instance));
 
         var contextProvider =
             new SqliteFolderSearchContextProvider(

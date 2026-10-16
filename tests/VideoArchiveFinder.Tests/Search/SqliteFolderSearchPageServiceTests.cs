@@ -1,9 +1,11 @@
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using VideoArchiveFinder.Application.Indexing;
 using VideoArchiveFinder.Application.Search;
 using VideoArchiveFinder.Application.Storage;
 using VideoArchiveFinder.Application.VideoFiles;
+using VideoArchiveFinder.Infrastructure;
 using VideoArchiveFinder.Infrastructure.Indexing;
 using VideoArchiveFinder.Infrastructure.Search;
 
@@ -223,6 +225,196 @@ public sealed class SqliteFolderSearchPageServiceTests
         Assert.Equal(
             legacy.Select(result => result.Name).ToArray(),
             page.Matches.Select(result => result.Name).ToArray());
+    }
+
+    // ---------------------------------------------------------------------
+    // Совместимость прежнего поискового API (Шаг 2)
+    // ---------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("фестиваль сборка", FolderSearchMode.Smart, true, true)]
+    [InlineData("фестиваль", FolderSearchMode.Smart, false, true)]
+    [InlineData("почта фестиваль", FolderSearchMode.Smart, true, false)]
+    [InlineData("фестиваль сборка", FolderSearchMode.Exact, true, true)]
+    [InlineData("почта", FolderSearchMode.Exact, true, false)]
+    public async Task SearchAsync_ReturnsExactlyTheFirstPageOfPagedSearch(
+        string queryText,
+        FolderSearchMode mode,
+        bool folderSource,
+        bool videoSource)
+    {
+        var context = await CreateContextAsync();
+
+        await AddFoldersAsync(context, count: 30);
+        await AddVideoFilesAsync(context, videoCount: 900);
+
+        var query = CreateQuery(
+            context,
+            queryText,
+            folderSource,
+            videoSource,
+            mode: mode);
+
+        // Прежний API обязан вернуть ровно первую порцию постраничного поиска:
+        // тот же состав, тот же порядок и то же ограничение количества.
+        var legacy = await context.SearchService.SearchAsync(query);
+
+        var page = await context.PageService.SearchFirstPageAsync(query);
+
+        Assert.Equal(
+            page.Matches.Select(match => match.Id).ToArray(),
+            legacy.Select(match => match.Id).ToArray());
+
+        Assert.Equal(
+            page.Matches.Select(match => match.Name).ToArray(),
+            legacy.Select(match => match.Name).ToArray());
+
+        Assert.Equal(
+            page.Matches.Select(match => match.IsVideoFile).ToArray(),
+            legacy.Select(match => match.IsVideoFile).ToArray());
+    }
+
+    [Fact]
+    public async Task SearchAsync_WithoutFolderSourceScope_SearchesAllFolders()
+    {
+        var context = await CreateContextAsync();
+
+        await AddFoldersAsync(context, count: 40);
+
+        // null в области источников означает «без ограничения»: прежний поиск
+        // искал по всем папкам индекса, и это поведение сохранено.
+        var query = new FolderSearchQuery(
+            "почта фестиваль",
+            FolderSearchMode.Smart,
+            DefaultPageSize,
+            RootSourceIds: null,
+            VideoFileRootSourceIds: []);
+
+        var legacy = await context.SearchService.SearchAsync(query);
+
+        Assert.Equal(40, legacy.Count);
+
+        var page = await context.PageService.SearchFirstPageAsync(query);
+
+        Assert.Equal(40, page.FolderMatchCount);
+        Assert.Equal(
+            page.Matches.Select(match => match.Id).ToArray(),
+            legacy.Select(match => match.Id).ToArray());
+    }
+
+    [Fact]
+    public async Task SearchAsync_WithEmptyFolderSourceScope_ReturnsNothing()
+    {
+        var context = await CreateContextAsync();
+
+        await AddFoldersAsync(context, count: 40);
+
+        // Пустая коллекция, в отличие от null, означает отсутствие области поиска.
+        var query = new FolderSearchQuery(
+            "почта фестиваль",
+            FolderSearchMode.Smart,
+            DefaultPageSize,
+            RootSourceIds: [],
+            VideoFileRootSourceIds: []);
+
+        Assert.Empty(await context.SearchService.SearchAsync(query));
+
+        var page = await context.PageService.SearchFirstPageAsync(query);
+
+        Assert.Empty(page.Matches);
+        Assert.Equal(0, page.TotalMatchCount);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(200)]
+    [InlineData(1000)]
+    public async Task SearchAsync_AcceptsMaximumResultCountUpTo1000(
+        int maxResults)
+    {
+        var context = await CreateContextAsync();
+
+        await AddFoldersAsync(context, count: 250);
+
+        var results = await context.SearchService.SearchAsync(
+            CreateQuery(
+                context,
+                "почта фестиваль",
+                folderSource: true,
+                pageSize: maxResults));
+
+        Assert.Equal(Math.Min(maxResults, 250), results.Count);
+    }
+
+    [Fact]
+    public void ServiceRegistration_WiresPagedSearchWithoutCycles()
+    {
+        var services = new ServiceCollection();
+
+        services.AddVideoArchiveFinderInfrastructure();
+
+        var searchDescriptor = Assert.Single(
+            services,
+            descriptor =>
+                descriptor.ServiceType == typeof(IFolderSearchService));
+
+        Assert.Equal(
+            typeof(SqliteFolderSearchService),
+            searchDescriptor.ImplementationType);
+
+        var pageDescriptor = Assert.Single(
+            services,
+            descriptor =>
+                descriptor.ServiceType ==
+                    typeof(IFolderSearchPageService));
+
+        Assert.Equal(
+            typeof(SqliteFolderSearchPageService),
+            pageDescriptor.ImplementationType);
+
+        // Направление зависимости: точечный поиск зависит от постраничного, а
+        // обратной зависимости нет, поэтому цикла в графе быть не может.
+        var searchParameters = typeof(SqliteFolderSearchService)
+            .GetConstructors()
+            .Single()
+            .GetParameters();
+
+        Assert.Contains(
+            searchParameters,
+            parameter =>
+                parameter.ParameterType ==
+                    typeof(IFolderSearchPageService));
+
+        var pageParameters = typeof(SqliteFolderSearchPageService)
+            .GetConstructors()
+            .Single()
+            .GetParameters();
+
+        Assert.DoesNotContain(
+            pageParameters,
+            parameter =>
+                parameter.ParameterType ==
+                    typeof(IFolderSearchService));
+
+        Assert.DoesNotContain(
+            pageParameters,
+            parameter =>
+                parameter.ParameterType ==
+                    typeof(IFolderSearchPageService));
+    }
+
+    [Fact]
+    public async Task SearchAsync_WhenIndexDatabaseIsMissing_ThrowsWithoutCreatingIt()
+    {
+        var context = await CreateContextAsync(initializeDatabase: false);
+
+        await Assert.ThrowsAnyAsync<SqliteException>(
+            () => context.SearchService.SearchAsync(
+                CreateQuery(context, "почта", folderSource: true)));
+
+        // Поиск открывает индекс только для чтения и не создаёт его: прежде
+        // неудачный поиск оставлял после себя пустой файл базы.
+        Assert.False(File.Exists(context.DatabasePath));
     }
 
     // ---------------------------------------------------------------------
@@ -944,7 +1136,8 @@ public sealed class SqliteFolderSearchPageServiceTests
             $"Папка {index:D3}");
     }
 
-    private async Task<SearchTestContext> CreateContextAsync()
+    private async Task<SearchTestContext> CreateContextAsync(
+        bool initializeDatabase = true)
     {
         var directoryProvider =
             new TestApplicationDataDirectoryProvider(
@@ -954,13 +1147,16 @@ public sealed class SqliteFolderSearchPageServiceTests
             new IndexDatabasePathProvider(
                 directoryProvider);
 
-        var initializer =
-            new SqliteIndexDatabaseInitializer(
-                databasePathProvider,
-                NullLogger<
-                    SqliteIndexDatabaseInitializer>.Instance);
+        if (initializeDatabase)
+        {
+            var initializer =
+                new SqliteIndexDatabaseInitializer(
+                    databasePathProvider,
+                    NullLogger<
+                        SqliteIndexDatabaseInitializer>.Instance);
 
-        await initializer.InitializeAsync();
+            await initializer.InitializeAsync();
+        }
 
         var repository =
             new SqliteFolderIndexRepository(
@@ -989,12 +1185,7 @@ public sealed class SqliteFolderSearchPageServiceTests
                     SqliteFolderSearchPageService>.Instance);
 
         var searchService =
-            new SqliteFolderSearchService(
-                databasePathProvider,
-                normalizationService,
-                stemService,
-                NullLogger<
-                    SqliteFolderSearchService>.Instance);
+            new SqliteFolderSearchService(pageService);
 
         return new SearchTestContext(
             repository,
@@ -1008,7 +1199,8 @@ public sealed class SqliteFolderSearchPageServiceTests
             directoryProvider,
             Path.Combine(
                 _temporaryDirectory,
-                "Файловый источник"));
+                "Файловый источник"),
+            databasePathProvider.GetDatabasePath());
     }
 
     private static FolderIndexUpsertItem CreateFolder(
@@ -1159,7 +1351,8 @@ public sealed class SqliteFolderSearchPageServiceTests
         Guid rootSourceId,
         Guid videoRootSourceId,
         IApplicationDataDirectoryProvider directoryProvider,
-        string videoRootPath)
+        string videoRootPath,
+        string databasePath)
     {
         public SqliteFolderIndexRepository Repository
         {
@@ -1210,6 +1403,11 @@ public sealed class SqliteFolderSearchPageServiceTests
         {
             get;
         } = videoRootPath;
+
+        public string DatabasePath
+        {
+            get;
+        } = databasePath;
 
         public int VideoFolderCount { get; set; }
     }

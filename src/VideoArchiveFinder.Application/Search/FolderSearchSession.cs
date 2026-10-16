@@ -8,11 +8,20 @@ namespace VideoArchiveFinder.Application.Search;
 /// зависит от количества найденных строк. Новое состояние возвращается вместе с
 /// каждой порцией, прежнее остаётся неизменным.
 /// </summary>
+/// <param name="RootSourceIds">
+/// Источники для поиска по папкам. <c>null</c> означает «без ограничения по
+/// источникам» — так же, как в <see cref="FolderSearchQuery.RootSourceIds"/>;
+/// пустая коллекция означает, что поиск по папкам не выполняется.
+/// </param>
+/// <param name="VideoFileRootSourceIds">
+/// Источники для поиска по именам видеофайлов. <c>null</c> или пустая коллекция
+/// означают, что поиск по видеофайлам не выполняется.
+/// </param>
 public sealed record FolderSearchSession(
     string QueryText,
     FolderSearchMode Mode,
-    IReadOnlyList<Guid> RootSourceIds,
-    IReadOnlyList<Guid> VideoFileRootSourceIds,
+    IReadOnlyList<Guid>? RootSourceIds,
+    IReadOnlyList<Guid>? VideoFileRootSourceIds,
     int PageSize,
     int FolderMatchCount,
     int VideoMatchCount,

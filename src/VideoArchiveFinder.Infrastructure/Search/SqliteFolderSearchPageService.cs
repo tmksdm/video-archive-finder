@@ -55,14 +55,17 @@ public sealed class SqliteFolderSearchPageService
         var normalizedQuery =
             _textNormalizationService.Normalize(query.Text);
 
+        // null означает «без ограничения по источникам» и обязан остаться null:
+        // прежний поиск в этом случае искал по всем папкам индекса. Пустая
+        // коллекция, наоборот, означает отсутствие области поиска.
         var rootSourceIds = query.RootSourceIds?
             .Distinct()
-            .ToArray() ?? [];
+            .ToArray();
 
         var videoFileRootSourceIds =
             query.VideoFileRootSourceIds?
                 .Distinct()
-                .ToArray() ?? [];
+                .ToArray();
 
         var session = new FolderSearchSession(
             QueryText: query.Text,
@@ -78,8 +81,8 @@ public sealed class SqliteFolderSearchPageService
             VideoCursor: null);
 
         if (normalizedQuery.Length == 0 ||
-            (rootSourceIds.Length == 0 &&
-             videoFileRootSourceIds.Length == 0))
+            (rootSourceIds is { Length: 0 } &&
+             videoFileRootSourceIds is not { Length: > 0 }))
         {
             return CreateEmptyPage(session);
         }
@@ -98,7 +101,7 @@ public sealed class SqliteFolderSearchPageService
                 .ConfigureAwait(false);
 
             var folderMatchCount =
-                rootSourceIds.Length == 0
+                rootSourceIds is { Length: 0 }
                     ? 0
                     : await CountFoldersAsync(
                             connection,
@@ -108,14 +111,14 @@ public sealed class SqliteFolderSearchPageService
                         .ConfigureAwait(false);
 
             var videoMatchCount =
-                videoFileRootSourceIds.Length == 0
-                    ? 0
-                    : await CountVideoFilesAsync(
+                videoFileRootSourceIds is { Length: > 0 }
+                    ? await CountVideoFilesAsync(
                             connection,
                             session,
                             normalizedQuery,
                             cancellationToken)
-                        .ConfigureAwait(false);
+                        .ConfigureAwait(false)
+                    : 0;
 
             var countedSession = session with
             {
@@ -220,13 +223,17 @@ public sealed class SqliteFolderSearchPageService
         string normalizedQuery,
         CancellationToken cancellationToken)
     {
-        var folderTake = Math.Min(
-            session.PageSize,
-            session.FolderMatchCount - session.FolderLoadedCount);
+        var folderTake = session.RootSourceIds is { Count: 0 }
+            ? 0
+            : Math.Min(
+                session.PageSize,
+                session.FolderMatchCount - session.FolderLoadedCount);
 
-        var videoTake = Math.Min(
-            session.PageSize - folderTake,
-            session.VideoMatchCount - session.VideoLoadedCount);
+        var videoTake = session.VideoFileRootSourceIds is not { Count: > 0 }
+            ? 0
+            : Math.Min(
+                session.PageSize - folderTake,
+                session.VideoMatchCount - session.VideoLoadedCount);
 
         var matches = new List<FolderSearchResult>(
             folderTake + videoTake);
@@ -300,16 +307,23 @@ public sealed class SqliteFolderSearchPageService
                 _searchStemService,
                 CreateQuery(session, session.Mode));
 
-        command.CommandText =
-            $"""
-            SELECT COUNT(*)
-            FROM Folders
-            WHERE {searchCondition}
-              AND {FolderSearchSql.BuildRootSourceIdFilter(
-                    "RootSourceId",
-                    session.RootSourceIds,
-                    "rootSourceId")};
-            """;
+        var sourceFilter = FolderSearchSql.BuildRootSourceIdFilter(
+            "RootSourceId",
+            session.RootSourceIds,
+            "rootSourceId");
+
+        command.CommandText = sourceFilter.Length == 0
+            ? $"""
+              SELECT COUNT(*)
+              FROM Folders
+              WHERE {searchCondition};
+              """
+            : $"""
+              SELECT COUNT(*)
+              FROM Folders
+              WHERE {searchCondition}
+                AND {sourceFilter};
+              """;
 
         command.Parameters.AddWithValue(
             "$normalizedQuery",
@@ -344,20 +358,31 @@ public sealed class SqliteFolderSearchPageService
         // Соединение с папками входит в счётчик намеренно: постраничная выдача
         // тоже соединяет таблицы, поэтому счётчик обязан считать ровно те
         // строки, которые достижимы при листании.
-        command.CommandText =
-            $"""
-            SELECT COUNT(*)
-            FROM VideoFiles v
-            INNER JOIN Folders f
-                ON f.RootSourceId = v.RootSourceId
-               AND f.FullPath = v.FolderFullPath
-            WHERE {searchCondition}
-              AND v.IsAvailable = 1
-              AND {FolderSearchSql.BuildRootSourceIdFilter(
-                    "v.RootSourceId",
-                    session.VideoFileRootSourceIds,
-                    "videoRootSourceId")};
-            """;
+        var sourceFilter = FolderSearchSql.BuildRootSourceIdFilter(
+            "v.RootSourceId",
+            session.VideoFileRootSourceIds,
+            "videoRootSourceId");
+
+        command.CommandText = sourceFilter.Length == 0
+            ? $"""
+              SELECT COUNT(*)
+              FROM VideoFiles v
+              INNER JOIN Folders f
+                  ON f.RootSourceId = v.RootSourceId
+                 AND f.FullPath = v.FolderFullPath
+              WHERE {searchCondition}
+                AND v.IsAvailable = 1;
+              """
+            : $"""
+              SELECT COUNT(*)
+              FROM VideoFiles v
+              INNER JOIN Folders f
+                  ON f.RootSourceId = v.RootSourceId
+                 AND f.FullPath = v.FolderFullPath
+              WHERE {searchCondition}
+                AND v.IsAvailable = 1
+                AND {sourceFilter};
+              """;
 
         command.Parameters.AddWithValue(
             "$normalizedQuery",
