@@ -6,6 +6,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Тесты модели представления поиска настраивают задержку ввода через
+         внутренний конструктор, чтобы не ждать debounce. -->
+    <InternalsVisibleTo Include="VideoArchiveFinder.Desktop.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="LibVLCSharp.WPF" Version="3.10.1" />
     <PackageReference Include="MaterialDesignThemes" Version="5.3.2" />

@@ -1,18 +1,36 @@
 ﻿using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using VideoArchiveFinder.Application.Search;
 
 namespace VideoArchiveFinder.Desktop.ViewModels;
 
+/// <summary>
+/// Модель представления результатов поиска.
+///
+/// Первую порцию выдаёт <see cref="IFolderSearchPageService"/>, следующие
+/// порции догружает команда «Показать ещё» по курсору сессии. Счётчики берутся
+/// из порции, то есть считают совпадения, а не контекстные узлы дерева.
+///
+/// Временное ограничение Шага 3 плана
+/// (<c>docs/SEARCH_COMPLETENESS_AUDIT.md</c>): накопленные совпадения передаются
+/// в существующий <see cref="FolderSearchTreeBuilder"/>, поэтому дерево при
+/// подгрузке пересобирается целиком, а раскрытие и прокрутка не сохраняются.
+/// Инкрементальное дописывание узлов — Шаг 4.
+/// </summary>
 public partial class FolderSearchViewModel
     : ObservableObject, IDisposable
 {
     private const int DebounceMilliseconds = 250;
-    private const int MaximumDisplayedResults = 200;
 
-    private readonly IFolderSearchService
-        _folderSearchService;
+    /// <summary>
+    /// Размер порции: столько же, сколько показывал прежний поиск.
+    /// </summary>
+    private const int SearchPageSize = 200;
+
+    private readonly IFolderSearchPageService
+        _folderSearchPageService;
 
     private readonly IFolderSearchContextProvider
         _folderSearchContextProvider;
@@ -23,9 +41,20 @@ public partial class FolderSearchViewModel
     private readonly ILogger<FolderSearchViewModel>
         _logger;
 
+    private readonly int _debounceMilliseconds;
+
     private CancellationTokenSource? _searchCancellation;
     private IReadOnlyCollection<Guid> _rootSourceIds = [];
     private IReadOnlyCollection<Guid> _videoFileRootSourceIds = [];
+
+    /// <summary>
+    /// Совпадения, показанные с учётом последней опубликованной порции.
+    /// Заменяется целиком при публикации, поэтому устаревшая операция не может
+    /// испортить состояние актуального поиска.
+    /// </summary>
+    private List<FolderSearchResult> _loadedMatches = [];
+
+    private FolderSearchSession? _session;
     private int _searchVersion;
     private bool _isDisposed;
 
@@ -40,17 +69,54 @@ public partial class FolderSearchViewModel
     private bool _isSearching;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(LoadMoreCommand))]
+    private bool _isLoadingMore;
+
+    [ObservableProperty]
     private string _resultsSummary =
         "Введите запрос для поиска";
 
+    [ObservableProperty]
+    private int _totalMatchCount;
+
+    [ObservableProperty]
+    private int _loadedMatchCount;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(LoadMoreCommand))]
+    private bool _hasMoreResults;
+
     public FolderSearchViewModel(
-        IFolderSearchService folderSearchService,
+        IFolderSearchPageService folderSearchPageService,
         IFolderSearchContextProvider
             folderSearchContextProvider,
         FolderSearchTreeBuilder folderSearchTreeBuilder,
         ILogger<FolderSearchViewModel> logger)
+        : this(
+            folderSearchPageService,
+            folderSearchContextProvider,
+            folderSearchTreeBuilder,
+            logger,
+            DebounceMilliseconds)
     {
-        _folderSearchService = folderSearchService;
+    }
+
+    /// <summary>
+    /// Конструктор с настраиваемой задержкой ввода. Продуктив создаётся через
+    /// внедрение зависимостей без последнего аргумента; тесты задают нулевую
+    /// задержку, поэтому проверяют логику, а не ожидание debounce.
+    /// </summary>
+    internal FolderSearchViewModel(
+        IFolderSearchPageService folderSearchPageService,
+        IFolderSearchContextProvider
+            folderSearchContextProvider,
+        FolderSearchTreeBuilder folderSearchTreeBuilder,
+        ILogger<FolderSearchViewModel> logger,
+        int debounceMilliseconds)
+    {
+        _folderSearchPageService =
+            folderSearchPageService;
+
         _folderSearchContextProvider =
             folderSearchContextProvider;
 
@@ -58,6 +124,7 @@ public partial class FolderSearchViewModel
             folderSearchTreeBuilder;
 
         _logger = logger;
+        _debounceMilliseconds = debounceMilliseconds;
     }
 
     public ObservableCollection<FolderSearchTreeNode>
@@ -97,6 +164,9 @@ public partial class FolderSearchViewModel
     {
         ArgumentNullException.ThrowIfNull(rootSourceIds);
 
+        // Область поиска всегда передаётся явными коллекциями: пустая означает
+        // «по этому потоку не искать», а не «без ограничения по источникам»
+        // (null в FolderSearchQuery значил бы последнее).
         _rootSourceIds = rootSourceIds
             .Distinct()
             .ToArray();
@@ -105,7 +175,6 @@ public partial class FolderSearchViewModel
             .Distinct()
             .ToArray() ?? [];
 
-        Results.Clear();
         QueueSearch();
     }
 
@@ -126,19 +195,14 @@ public partial class FolderSearchViewModel
             cancellation);
 
         previousCancellation?.Cancel();
+        previousCancellation?.Dispose();
+
+        ResetSearchState();
 
         if (string.IsNullOrWhiteSpace(SearchText))
         {
-            Interlocked.CompareExchange(
-                ref _searchCancellation,
-                null,
-                cancellation);
+            ReleaseCancellation(cancellation);
 
-            cancellation.Cancel();
-            cancellation.Dispose();
-
-            Results.Clear();
-            IsSearching = false;
             ResultsSummary =
                 "Введите запрос для поиска";
 
@@ -148,16 +212,8 @@ public partial class FolderSearchViewModel
         if (_rootSourceIds.Count == 0 &&
             _videoFileRootSourceIds.Count == 0)
         {
-            Interlocked.CompareExchange(
-                ref _searchCancellation,
-                null,
-                cancellation);
+            ReleaseCancellation(cancellation);
 
-            cancellation.Cancel();
-            cancellation.Dispose();
-
-            Results.Clear();
-            IsSearching = false;
             ResultsSummary =
                 "Выберите хотя бы один источник для поиска";
 
@@ -169,36 +225,52 @@ public partial class FolderSearchViewModel
 
         _ = SearchAfterDelayAsync(
             version,
-            cancellation);
+            cancellation.Token);
     }
 
     private async Task SearchAfterDelayAsync(
         int version,
-        CancellationTokenSource cancellation)
+        CancellationToken cancellationToken)
     {
         try
         {
             await Task.Delay(
-                DebounceMilliseconds,
-                cancellation.Token);
+                _debounceMilliseconds,
+                cancellationToken);
 
             var query = new FolderSearchQuery(
                 SearchText,
                 SearchMode,
-                MaximumDisplayedResults,
+                SearchPageSize,
                 _rootSourceIds,
                 _videoFileRootSourceIds);
 
+            var page =
+                await _folderSearchPageService
+                    .SearchFirstPageAsync(
+                        query,
+                        cancellationToken);
+
+            if (version != _searchVersion ||
+                _isDisposed)
+            {
+                return;
+            }
+
             var matches =
-                await _folderSearchService.SearchAsync(
-                    query,
-                    cancellation.Token);
+                new List<FolderSearchResult>(page.Matches);
 
             var contextFolders =
                 await _folderSearchContextProvider
                     .GetContextFoldersAsync(
                         matches,
-                        cancellation.Token);
+                        cancellationToken);
+
+            if (version != _searchVersion ||
+                _isDisposed)
+            {
+                return;
+            }
 
             var resultTree =
                 _folderSearchTreeBuilder.Build(
@@ -207,21 +279,20 @@ public partial class FolderSearchViewModel
                     query.Text,
                     query.Mode);
 
-            if (version != _searchVersion)
+            if (version != _searchVersion ||
+                _isDisposed)
             {
                 return;
             }
 
-            Results.Clear();
+            _loadedMatches = matches;
+            _session = page.NextSession;
 
-            foreach (var rootNode in resultTree)
-            {
-                Results.Add(rootNode);
-            }
-
-            ResultsSummary = matches.Count == 0
-                ? "Совпадений не найдено"
-                : $"Найдено результатов: {matches.Count}";
+            PublishResults(
+                resultTree,
+                page.TotalMatchCount,
+                page.LoadedMatchCount,
+                page.HasMoreResults);
         }
         catch (OperationCanceledException)
         {
@@ -229,14 +300,14 @@ public partial class FolderSearchViewModel
         }
         catch (Exception exception)
         {
-            if (version != _searchVersion)
+            if (version != _searchVersion ||
+                _isDisposed)
             {
                 return;
             }
 
-            Results.Clear();
-            ResultsSummary =
-                "Не удалось выполнить поиск";
+            ResetSearchState();
+            ResultsSummary = "Не удалось выполнить поиск";
 
             _logger.LogError(
                 exception,
@@ -244,18 +315,171 @@ public partial class FolderSearchViewModel
         }
         finally
         {
-            if (version == _searchVersion)
+            if (version == _searchVersion &&
+                !_isDisposed)
             {
                 IsSearching = false;
             }
-
-            Interlocked.CompareExchange(
-                ref _searchCancellation,
-                null,
-                cancellation);
-
-            cancellation.Dispose();
         }
+    }
+
+    private bool CanLoadMore()
+    {
+        return !_isDisposed &&
+               !IsLoadingMore &&
+               HasMoreResults;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanLoadMore))]
+    private async Task LoadMoreAsync()
+    {
+        var session = _session;
+        var cancellation = _searchCancellation;
+
+        // Явная защита от повторного запуска: прямой вызов Execute не сверяется
+        // с CanExecute, поэтому одной проверки команды недостаточно.
+        if (_isDisposed ||
+            IsLoadingMore ||
+            session is null ||
+            cancellation is null ||
+            !HasMoreResults)
+        {
+            return;
+        }
+
+        var version = _searchVersion;
+        var cancellationToken = cancellation.Token;
+
+        IsLoadingMore = true;
+
+        try
+        {
+            var page =
+                await _folderSearchPageService
+                    .SearchNextPageAsync(
+                        session,
+                        cancellationToken);
+
+            if (version != _searchVersion ||
+                _isDisposed)
+            {
+                return;
+            }
+
+            var matches = new List<FolderSearchResult>(
+                _loadedMatches);
+
+            matches.AddRange(page.Matches);
+
+            var contextFolders =
+                await _folderSearchContextProvider
+                    .GetContextFoldersAsync(
+                        matches,
+                        cancellationToken);
+
+            if (version != _searchVersion ||
+                _isDisposed)
+            {
+                return;
+            }
+
+            var resultTree =
+                _folderSearchTreeBuilder.Build(
+                    matches,
+                    contextFolders,
+                    session.QueryText,
+                    session.Mode);
+
+            if (version != _searchVersion ||
+                _isDisposed)
+            {
+                return;
+            }
+
+            _loadedMatches = matches;
+            _session = page.NextSession;
+
+            PublishResults(
+                resultTree,
+                page.TotalMatchCount,
+                page.LoadedMatchCount,
+                page.HasMoreResults);
+        }
+        catch (OperationCanceledException)
+        {
+            // Подгрузка отменена новым запросом.
+        }
+        catch (Exception exception)
+        {
+            if (version != _searchVersion ||
+                _isDisposed)
+            {
+                return;
+            }
+
+            // Показанное дерево и счётчики сохраняются: неудачная подгрузка
+            // не должна скрывать уже найденные совпадения.
+            _logger.LogError(
+                exception,
+                "Could not load the next folder search page.");
+        }
+        finally
+        {
+            if (version == _searchVersion &&
+                !_isDisposed)
+            {
+                IsLoadingMore = false;
+            }
+        }
+    }
+
+    private void PublishResults(
+        IReadOnlyList<FolderSearchTreeNode> resultTree,
+        int totalMatchCount,
+        int loadedMatchCount,
+        bool hasMoreResults)
+    {
+        Results.Clear();
+
+        foreach (var rootNode in resultTree)
+        {
+            Results.Add(rootNode);
+        }
+
+        TotalMatchCount = totalMatchCount;
+        LoadedMatchCount = loadedMatchCount;
+        HasMoreResults = hasMoreResults;
+
+        ResultsSummary = totalMatchCount == 0
+            ? "Совпадений не найдено"
+            : $"Найдено совпадений: {totalMatchCount}; " +
+              $"показано {loadedMatchCount}";
+    }
+
+    private void ResetSearchState()
+    {
+        _session = null;
+        _loadedMatches = [];
+
+        TotalMatchCount = 0;
+        LoadedMatchCount = 0;
+        HasMoreResults = false;
+        IsLoadingMore = false;
+        IsSearching = false;
+
+        Results.Clear();
+    }
+
+    private void ReleaseCancellation(
+        CancellationTokenSource cancellation)
+    {
+        Interlocked.CompareExchange(
+            ref _searchCancellation,
+            null,
+            cancellation);
+
+        cancellation.Cancel();
+        cancellation.Dispose();
     }
 
     public void Dispose()
@@ -275,6 +499,7 @@ public partial class FolderSearchViewModel
             null);
 
         cancellation?.Cancel();
+        cancellation?.Dispose();
     }
 
     public sealed record SearchModeOption(
