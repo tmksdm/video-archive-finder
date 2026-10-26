@@ -18,6 +18,25 @@ using var dataDirectoryProvider =
 
 try
 {
+    if (args.Length == 1 &&
+        string.Equals(
+            args[0],
+            "--paging",
+            StringComparison.OrdinalIgnoreCase))
+    {
+        var pagingRunner =
+            new PagingSearchBenchmarkRunner(
+                dataDirectoryProvider);
+
+        await pagingRunner.RunAsync(
+            cancellationTokenSource.Token);
+
+        Console.WriteLine(
+            "Измерение завершено успешно.");
+
+        return 0;
+    }
+
     if (args.Length == 2 &&
         string.Equals(
             args[0],
@@ -45,6 +64,9 @@ try
 
         Console.Error.WriteLine(
             "  VideoArchiveFinder.SearchBenchmark");
+
+        Console.Error.WriteLine(
+            "  VideoArchiveFinder.SearchBenchmark --paging");
 
         Console.Error.WriteLine(
             "  VideoArchiveFinder.SearchBenchmark " +

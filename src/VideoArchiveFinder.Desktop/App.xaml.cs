@@ -8,6 +8,7 @@ using VideoArchiveFinder.Desktop.Services;
 using VideoArchiveFinder.Application.Indexing;
 using VideoArchiveFinder.Application.ExternalTools;
 using VideoArchiveFinder.Application.Thumbnails;
+using VideoArchiveFinder.Application.VideoFiles;
 
 
 namespace VideoArchiveFinder.Desktop;
@@ -23,9 +24,10 @@ public partial class App : System.Windows.Application
     {
         base.OnStartup(e);
 
-        var applicationDataPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "VideoArchiveFinder");
+        var applicationDataPath =
+            new VideoArchiveFinder.Infrastructure.Storage
+                .LocalApplicationDataDirectoryProvider()
+                .GetApplicationDataDirectory();
 
         var logsPath = Path.Combine(applicationDataPath, "Logs");
         Directory.CreateDirectory(logsPath);
@@ -182,12 +184,49 @@ public partial class App : System.Windows.Application
             _cacheMaintenanceCancellation?.Dispose();
 
             await _host.StopAsync();
+            Log.Information("Shutdown: host stopped");
+
+            // These queues bridge async shutdown in IDisposable. Drain them
+            // without a dispatcher context before disposing UI services here.
+            DisposeQueuedServicesOffUiThread();
+
             _host.Dispose();
+            Log.Information("Shutdown: host disposed");
         }
 
 
         await Log.CloseAndFlushAsync();
         base.OnExit(e);
+    }
+
+    private void DisposeQueuedServicesOffUiThread()
+    {
+        if (_host is null)
+        {
+            return;
+        }
+
+        DisposeAsyncServiceOffUiThread(
+            _host.Services.GetService<
+                IVideoFileAnalysisQueue>());
+        DisposeAsyncServiceOffUiThread(
+            _host.Services.GetService<
+                IStaticThumbnailGenerationQueue>());
+    }
+
+    private static void DisposeAsyncServiceOffUiThread(
+        object? service)
+    {
+        if (service is not IAsyncDisposable asyncDisposable)
+        {
+            return;
+        }
+
+        Task.Run(
+                async () =>
+                    await asyncDisposable.DisposeAsync())
+            .GetAwaiter()
+            .GetResult();
     }
 
     private static async Task RunCacheMaintenanceAsync(

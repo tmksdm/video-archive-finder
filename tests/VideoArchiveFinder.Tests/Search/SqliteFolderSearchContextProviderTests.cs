@@ -1,10 +1,10 @@
-﻿using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Logging.Abstractions;
+﻿using Microsoft.Extensions.Logging.Abstractions;
 using VideoArchiveFinder.Application.Indexing;
 using VideoArchiveFinder.Application.Search;
 using VideoArchiveFinder.Application.Storage;
 using VideoArchiveFinder.Infrastructure.Indexing;
 using VideoArchiveFinder.Infrastructure.Search;
+using VideoArchiveFinder.Tests;
 
 namespace VideoArchiveFinder.Tests.Search;
 
@@ -236,7 +236,8 @@ public sealed class SqliteFolderSearchContextProviderTests
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
+        SqliteTestDatabasePools.ClearForTemporaryDirectory(
+            _temporaryDirectory);
 
         if (Directory.Exists(_temporaryDirectory))
         {

@@ -2,6 +2,7 @@
 using VideoArchiveFinder.Application.Storage;
 using VideoArchiveFinder.Application.VideoFiles;
 using VideoArchiveFinder.Infrastructure.Indexing;
+using VideoArchiveFinder.Tests;
 
 namespace VideoArchiveFinder.Tests.VideoFiles;
 
@@ -971,9 +972,8 @@ public sealed class SqliteVideoFileIndexRepositoryTests
 
     public void Dispose()
     {
-        Microsoft.Data.Sqlite
-            .SqliteConnection
-            .ClearAllPools();
+        SqliteTestDatabasePools.ClearForTemporaryDirectory(
+            _temporaryDirectory);
 
         if (Directory.Exists(_temporaryDirectory))
         {

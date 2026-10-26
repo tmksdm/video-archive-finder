@@ -1,4 +1,5 @@
-﻿using VideoArchiveFinder.Application.Search;
+﻿using System.Collections.Concurrent;
+using VideoArchiveFinder.Application.Search;
 
 namespace VideoArchiveFinder.Desktop.Tests.ViewModels;
 
@@ -37,6 +38,25 @@ internal sealed class StubFolderSearchPageService
     public int FirstPageCallCount { get; private set; }
 
     public int NextPageCallCount { get; private set; }
+
+    public ConcurrentBag<Guid> ReleasedSessionIds { get; } = [];
+
+    public Func<FolderSearchSession, CancellationToken, Task>?
+        BeforeValidateAsync { get; set; }
+
+    public void ReleaseSession(FolderSearchSession session)
+    {
+        ReleasedSessionIds.Add(session.SessionId);
+    }
+
+    public Task ValidateSessionAsync(
+        FolderSearchSession session,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return BeforeValidateAsync?.Invoke(session, cancellationToken)
+            ?? Task.CompletedTask;
+    }
 
     public List<FolderSearchQuery> FirstPageQueries { get; } = [];
 
@@ -94,7 +114,10 @@ internal sealed class StubFolderSearchPageService
             FolderLoadedCount: matches.Count,
             VideoLoadedCount: 0,
             FolderCursor: null,
-            VideoCursor: null);
+            VideoCursor: null)
+        {
+            SessionId = Guid.NewGuid()
+        };
 
         return new FolderSearchPage(
             Matches: matches,

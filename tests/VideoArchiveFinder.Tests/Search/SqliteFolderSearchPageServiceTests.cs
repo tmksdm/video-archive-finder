@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Reflection;
 using VideoArchiveFinder.Application.Indexing;
 using VideoArchiveFinder.Application.Search;
 using VideoArchiveFinder.Application.Storage;
@@ -12,13 +13,16 @@ using VideoArchiveFinder.Infrastructure.Search;
 namespace VideoArchiveFinder.Tests.Search;
 
 /// <summary>
-/// Тесты постраничного поиска (Шаг 1 плана из
+/// Тесты постраничного поиска (Шаги 1 и 6 плана из
 /// <c>docs/SEARCH_COMPLETENESS_AUDIT.md</c>).
 ///
 /// Проверяется: полнота выдачи при любом числе совпадений, отсутствие пропусков
 /// и дубликатов, точные счётчики, приоритет папок в бюджете порции, сохранение
 /// эталонного порядка сортировки и эквивалентность постраничной выборки
 /// независимому эталону <c>OFFSET</c>/<c>LIMIT</c> на глубоких страницах.
+/// Дополнительно закреплены CHANGE-STOP по <c>data_version</c>, владение
+/// сессионным соединением, <c>ValidateSessionAsync</c>/<c>ReleaseSession</c> и
+/// офлайн-поиск по локальному индексу при недоступном UNC-пути источника.
 /// </summary>
 public sealed class SqliteFolderSearchPageServiceTests
     : IDisposable
@@ -30,6 +34,9 @@ public sealed class SqliteFolderSearchPageServiceTests
             Path.GetTempPath(),
             "VideoArchiveFinder.Tests",
             Guid.NewGuid().ToString("N"));
+
+    private readonly List<SqliteFolderSearchPageService>
+        _pageServices = [];
 
     // ---------------------------------------------------------------------
     // Полнота выдачи и счётчики
@@ -848,6 +855,861 @@ public sealed class SqliteFolderSearchPageServiceTests
     }
 
     // ---------------------------------------------------------------------
+    // CHANGE-STOP: отпечаток индекса (Шаг 6)
+    // ---------------------------------------------------------------------
+
+    [Fact]
+    public async Task SearchFirstPageAsync_AssignsOpaqueSessionIdPreservedByWith()
+    {
+        var context = await CreateContextAsync();
+
+        await AddVideoFilesAsync(context, videoCount: 250);
+
+        var page = await context.PageService.SearchFirstPageAsync(
+            CreateQuery(context, "фестиваль", videoSource: true));
+
+        try
+        {
+            Assert.NotEqual(Guid.Empty, page.NextSession.SessionId);
+
+            var copied = page.NextSession with
+            {
+                FolderLoadedCount = 0
+            };
+
+            Assert.Equal(
+                page.NextSession.SessionId,
+                copied.SessionId);
+        }
+        finally
+        {
+            context.PageService.ReleaseSession(page.NextSession);
+        }
+    }
+
+    [Fact]
+    public async Task SearchFirstPageAsync_EmptyQuery_ReturnsSessionWithoutLease()
+    {
+        var context = await CreateContextAsync();
+
+        await AddVideoFilesAsync(context, videoCount: 5);
+
+        var page = await context.PageService.SearchFirstPageAsync(
+            CreateQuery(context, "   ", videoSource: true));
+
+        // У пустой выдачи соединения нет; Guid.Empty отличает её от
+        // освобождённой сессии, у которой соединение было.
+        Assert.Equal(Guid.Empty, page.NextSession.SessionId);
+        Assert.Equal(0, GetActiveLeaseCount(context.PageService));
+
+        await context.PageService.ValidateSessionAsync(
+            page.NextSession);
+
+        context.PageService.ReleaseSession(page.NextSession);
+
+        Assert.Equal(0, GetActiveLeaseCount(context.PageService));
+    }
+
+    [Fact]
+    public async Task ValidateSessionAsync_AfterReleaseOrForUnknownId_Throws()
+    {
+        var context = await CreateContextAsync();
+
+        await AddVideoFilesAsync(context, videoCount: 250);
+
+        var page = await context.PageService.SearchFirstPageAsync(
+            CreateQuery(context, "фестиваль", videoSource: true));
+
+        Assert.NotEqual(Guid.Empty, page.NextSession.SessionId);
+
+        context.PageService.ReleaseSession(page.NextSession);
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => context.PageService.ValidateSessionAsync(
+                page.NextSession));
+
+        var unknownSession = page.NextSession with
+        {
+            SessionId = Guid.NewGuid()
+        };
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => context.PageService.ValidateSessionAsync(
+                unknownSession));
+    }
+
+    [Fact]
+    public async Task ReleaseSession_ClosesNativeDatabaseHandleWithoutPooling()
+    {
+        var context = await CreateContextAsync();
+
+        await AddVideoFilesAsync(context, videoCount: 500);
+
+        var page = await context.PageService.SearchFirstPageAsync(
+            CreateQuery(context, "фестиваль", videoSource: true));
+
+        Assert.Equal(1, GetActiveLeaseCount(context.PageService));
+
+        // Подготовка использовала пулируемые соединения репозиториев.
+        // Очищаем только их пул; сессионное соединение проверяется отдельно.
+        SqliteConnection.ClearPool(
+            new SqliteConnection(
+                BuildConnectionString(
+                    context,
+                    SqliteOpenMode.ReadWriteCreate)));
+
+        context.PageService.ReleaseSession(page.NextSession);
+
+        Assert.Equal(0, GetActiveLeaseCount(context.PageService));
+
+        // Никакого ClearPool после ReleaseSession: файл должен открываться
+        // эксклюзивно и переименовываться, то есть native handle закрыт.
+        await using (var stream = new FileStream(
+            context.DatabasePath,
+            FileMode.Open,
+            FileAccess.ReadWrite,
+            FileShare.None))
+        {
+            Assert.True(stream.CanWrite);
+        }
+
+        var releasedPath = context.DatabasePath + ".released";
+
+        File.Move(context.DatabasePath, releasedPath);
+
+        Assert.True(File.Exists(releasedPath));
+        Assert.False(File.Exists(context.DatabasePath));
+
+        File.Move(releasedPath, context.DatabasePath);
+    }
+
+    [Fact]
+    public async Task SearchNextPageAsync_AfterInsertBetweenPages_StopsWithIndexChanged()
+    {
+        var context = await CreateContextAsync();
+
+        await AddVideoFilesAsync(context, videoCount: 250);
+
+        var page = await context.PageService.SearchFirstPageAsync(
+            CreateQuery(context, "фестиваль", videoSource: true));
+
+        try
+        {
+            Assert.True(page.HasMoreResults);
+
+            await ExecuteWriteAsync(
+                context,
+                (connection, transaction) =>
+                    InsertVideoAsync(
+                        context,
+                        connection,
+                        transaction,
+                        GetVideoFolderPath(context, 0),
+                        "Фестиваль новый.mxf"));
+
+            var exception =
+                await Assert.ThrowsAsync<FolderSearchIndexChangedException>(
+                    () => context.PageService.SearchNextPageAsync(
+                        page.NextSession));
+
+            Assert.Equal(
+                page.NextSession.SessionId,
+                exception.SessionId);
+
+            // Сессия помечена остановленной: повторная попытка не читает
+            // порцию и не может обойти CHANGE-STOP.
+            await Assert.ThrowsAsync<FolderSearchIndexChangedException>(
+                () => context.PageService.SearchNextPageAsync(
+                    page.NextSession));
+        }
+        finally
+        {
+            context.PageService.ReleaseSession(page.NextSession);
+        }
+    }
+
+    [Fact]
+    public async Task SearchNextPageAsync_AfterDeleteBetweenPages_StopsWithIndexChanged()
+    {
+        var context = await CreateContextAsync();
+
+        await AddVideoFilesAsync(context, videoCount: 250);
+
+        var page = await context.PageService.SearchFirstPageAsync(
+            CreateQuery(context, "фестиваль", videoSource: true));
+
+        try
+        {
+            await ExecuteWriteAsync(
+                context,
+                async (connection, transaction) =>
+                {
+                    await using var command =
+                        connection.CreateCommand();
+
+                    command.Transaction = transaction;
+
+                    command.CommandText =
+                        """
+                        DELETE FROM VideoFiles
+                        WHERE Id = (SELECT MIN(Id) FROM VideoFiles);
+                        """;
+
+                    await command.ExecuteNonQueryAsync();
+                });
+
+            await Assert.ThrowsAsync<FolderSearchIndexChangedException>(
+                () => context.PageService.SearchNextPageAsync(
+                    page.NextSession));
+        }
+        finally
+        {
+            context.PageService.ReleaseSession(page.NextSession);
+        }
+    }
+
+    [Fact]
+    public async Task SearchNextPageAsync_AfterRenameBetweenPages_StopsWithIndexChanged()
+    {
+        var context = await CreateContextAsync();
+
+        await AddVideoFilesAsync(context, videoCount: 250);
+
+        var page = await context.PageService.SearchFirstPageAsync(
+            CreateQuery(context, "фестиваль", videoSource: true));
+
+        try
+        {
+            // Переименование в путях записи — вставка новой строки и удаление
+            // старой; число совпадений при этом не меняется.
+            var folderPath = GetVideoFolderPath(context, 0);
+            var oldPath = Path.Combine(
+                folderPath,
+                CreateVideoName(0));
+
+            await ExecuteWriteAsync(
+                context,
+                async (connection, transaction) =>
+                {
+                    await InsertVideoAsync(
+                        context,
+                        connection,
+                        transaction,
+                        folderPath,
+                        "Фестиваль переименованный.mxf");
+
+                    await using var command =
+                        connection.CreateCommand();
+
+                    command.Transaction = transaction;
+
+                    command.CommandText =
+                        """
+                        DELETE FROM VideoFiles
+                        WHERE FullPath = $oldPath;
+                        """;
+
+                    command.Parameters.AddWithValue(
+                        "$oldPath",
+                        oldPath);
+
+                    await command.ExecuteNonQueryAsync();
+                });
+
+            await Assert.ThrowsAsync<FolderSearchIndexChangedException>(
+                () => context.PageService.SearchNextPageAsync(
+                    page.NextSession));
+        }
+        finally
+        {
+            context.PageService.ReleaseSession(page.NextSession);
+        }
+    }
+
+    [Fact]
+    public async Task SearchNextPageAsync_AfterInPlaceUpdateWithUnchangedDiagnosticStamp_Stops()
+    {
+        var context = await CreateContextAsync();
+
+        await AddVideoFilesAsync(context, videoCount: 250);
+
+        var page = await context.PageService.SearchFirstPageAsync(
+            CreateQuery(context, "фестиваль", videoSource: true));
+
+        try
+        {
+            // Тройка (COUNT, MAX(Id), MAX(LastSeenUtc)) не меняется: обновление
+            // на месте не добавляет и не удаляет строки и не трогает метку.
+            var stampBefore =
+                await ReadVideoDiagnosticStampAsync(context);
+
+            const string updatedName =
+                "Фестиваль сборка обновлённый";
+
+            await ExecuteWriteAsync(
+                context,
+                async (connection, transaction) =>
+                {
+                    await using var command =
+                        connection.CreateCommand();
+
+                    command.Transaction = transaction;
+
+                    command.CommandText =
+                        """
+                        UPDATE VideoFiles
+                        SET Name = $name,
+                            NormalizedName = $normalizedName
+                        WHERE Id = (SELECT MIN(Id) FROM VideoFiles);
+                        """;
+
+                    command.Parameters.AddWithValue(
+                        "$name",
+                        updatedName);
+
+                    command.Parameters.AddWithValue(
+                        "$normalizedName",
+                        context.NormalizationService.Normalize(
+                            updatedName));
+
+                    await command.ExecuteNonQueryAsync();
+                });
+
+            var stampAfter =
+                await ReadVideoDiagnosticStampAsync(context);
+
+            Assert.Equal(stampBefore, stampAfter);
+
+            await Assert.ThrowsAsync<FolderSearchIndexChangedException>(
+                () => context.PageService.SearchNextPageAsync(
+                    page.NextSession));
+        }
+        finally
+        {
+            context.PageService.ReleaseSession(page.NextSession);
+        }
+    }
+
+    [Fact]
+    public async Task SearchNextPageAsync_AfterNetZeroInsertAndDelete_Stops()
+    {
+        var context = await CreateContextAsync();
+
+        await AddVideoFilesAsync(context, videoCount: 250);
+
+        var page = await context.PageService.SearchFirstPageAsync(
+            CreateQuery(context, "фестиваль", videoSource: true));
+
+        try
+        {
+            var stampBefore =
+                await ReadVideoDiagnosticStampAsync(context);
+
+            var folderPath = GetVideoFolderPath(context, 0);
+            var insertedName = "Фестиваль временный.mxf";
+            var insertedPath = Path.Combine(
+                folderPath,
+                insertedName);
+
+            await ExecuteWriteAsync(
+                context,
+                async (connection, transaction) =>
+                {
+                    await InsertVideoAsync(
+                        context,
+                        connection,
+                        transaction,
+                        folderPath,
+                        insertedName);
+
+                    await using var command =
+                        connection.CreateCommand();
+
+                    command.Transaction = transaction;
+
+                    command.CommandText =
+                        """
+                        DELETE FROM VideoFiles
+                        WHERE FullPath = $fullPath;
+                        """;
+
+                    command.Parameters.AddWithValue(
+                        "$fullPath",
+                        insertedPath);
+
+                    await command.ExecuteNonQueryAsync();
+                });
+
+            // Состав строк и все три диагностических значения совпадают с
+            // исходными, но data_version уже изменился коммитом.
+            var stampAfter =
+                await ReadVideoDiagnosticStampAsync(context);
+
+            Assert.Equal(stampBefore, stampAfter);
+
+            await Assert.ThrowsAsync<FolderSearchIndexChangedException>(
+                () => context.PageService.SearchNextPageAsync(
+                    page.NextSession));
+        }
+        finally
+        {
+            context.PageService.ReleaseSession(page.NextSession);
+        }
+    }
+
+    [Fact]
+    public async Task ValidateSessionAsync_AfterWriterCommit_StopsAndMarksSession()
+    {
+        var context = await CreateContextAsync();
+
+        await AddVideoFilesAsync(context, videoCount: 250);
+
+        var page = await context.PageService.SearchFirstPageAsync(
+            CreateQuery(context, "фестиваль", videoSource: true));
+
+        try
+        {
+            await InsertMatchingVideoAsync(
+                context,
+                "Фестиваль после проверки.mxf");
+
+            var exception =
+                await Assert.ThrowsAsync<FolderSearchIndexChangedException>(
+                    () => context.PageService.ValidateSessionAsync(
+                        page.NextSession));
+
+            Assert.Equal(
+                page.NextSession.SessionId,
+                exception.SessionId);
+
+            await Assert.ThrowsAsync<FolderSearchIndexChangedException>(
+                () => context.PageService.SearchNextPageAsync(
+                    page.NextSession));
+        }
+        finally
+        {
+            context.PageService.ReleaseSession(page.NextSession);
+        }
+    }
+
+    [Fact]
+    public async Task ValidateSessionAsync_WithUnchangedIndex_AllowsNextPage()
+    {
+        var context = await CreateContextAsync();
+
+        await AddVideoFilesAsync(context, videoCount: 500);
+
+        var page = await context.PageService.SearchFirstPageAsync(
+            CreateQuery(context, "фестиваль", videoSource: true));
+
+        try
+        {
+            await context.PageService.ValidateSessionAsync(
+                page.NextSession);
+
+            var nextPage =
+                await context.PageService.SearchNextPageAsync(
+                    page.NextSession);
+
+            Assert.Equal(200, nextPage.Matches.Count);
+
+            await context.PageService.ValidateSessionAsync(
+                nextPage.NextSession);
+
+            context.PageService.ReleaseSession(
+                nextPage.NextSession);
+        }
+        finally
+        {
+            context.PageService.ReleaseSession(page.NextSession);
+        }
+    }
+
+    [Fact]
+    public async Task ValidateSessionAsync_AfterLastPageBeforeRelease_DetectsCommit()
+    {
+        var context = await CreateContextAsync();
+
+        await AddVideoFilesAsync(context, videoCount: 100);
+
+        var page = await context.PageService.SearchFirstPageAsync(
+            CreateQuery(context, "фестиваль", videoSource: true));
+
+        try
+        {
+            Assert.False(page.HasMoreResults);
+
+            // Последняя страница не освобождает сессию: до публикации
+            // соединение обязано оставаться доступным для проверки.
+            Assert.Equal(
+                1,
+                GetActiveLeaseCount(context.PageService));
+
+            await InsertMatchingVideoAsync(
+                context,
+                "Фестиваль после последней страницы.mxf");
+
+            await Assert.ThrowsAsync<FolderSearchIndexChangedException>(
+                () => context.PageService.ValidateSessionAsync(
+                    page.NextSession));
+        }
+        finally
+        {
+            context.PageService.ReleaseSession(page.NextSession);
+        }
+    }
+
+    [Fact]
+    public async Task SearchNextPageAsync_AfterOtherConnectionReadsDataVersion_StillSucceeds()
+    {
+        var context = await CreateContextAsync();
+
+        await AddVideoFilesAsync(context, videoCount: 500);
+
+        var page = await context.PageService.SearchFirstPageAsync(
+            CreateQuery(context, "фестиваль", videoSource: true));
+
+        try
+        {
+            // Другое соединение имеет собственное значение data_version:
+            // сверка обязана остаться на сессионном соединении.
+            await using (var otherConnection =
+                CreateReadOnlyConnection(context))
+            {
+                await otherConnection.OpenAsync();
+
+                await using var command =
+                    otherConnection.CreateCommand();
+
+                command.CommandText = "PRAGMA data_version;";
+
+                Assert.NotNull(
+                    await command.ExecuteScalarAsync());
+            }
+
+            var nextPage =
+                await context.PageService.SearchNextPageAsync(
+                    page.NextSession);
+
+            Assert.Equal(200, nextPage.Matches.Count);
+
+            await context.PageService.ValidateSessionAsync(
+                nextPage.NextSession);
+
+            context.PageService.ReleaseSession(
+                nextPage.NextSession);
+        }
+        finally
+        {
+            context.PageService.ReleaseSession(page.NextSession);
+        }
+    }
+
+    [Fact]
+    public async Task ConcurrentWriter_CommitAroundNextPage_IsDetected()
+    {
+        var context = await CreateContextAsync();
+
+        await AddVideoFilesAsync(context, videoCount: 1_000);
+
+        var page = await context.PageService.SearchFirstPageAsync(
+            CreateQuery(context, "фестиваль", videoSource: true));
+
+        try
+        {
+            var writer = Task.Run(
+                () => InsertMatchingVideoAsync(
+                    context,
+                    "Фестиваль параллельный.mxf"));
+
+            var session = page.NextSession;
+
+            try
+            {
+                var nextPage =
+                    await context.PageService.SearchNextPageAsync(
+                        session);
+
+                session = nextPage.NextSession;
+            }
+            catch (FolderSearchIndexChangedException)
+            {
+                // Коммит писателя обогнал порцию и уже остановил сессию.
+            }
+
+            await writer;
+
+            // Независимо от того, успела ли порция прочитаться до коммита,
+            // следующая проверка обязана обнаружить изменение.
+            await Assert.ThrowsAsync<FolderSearchIndexChangedException>(
+                () => context.PageService.SearchNextPageAsync(
+                    session));
+        }
+        finally
+        {
+            context.PageService.ReleaseSession(page.NextSession);
+        }
+    }
+
+    [Fact]
+    public async Task SearchNextPageAsync_CancelledTokenKeepsLeaseUntilRelease()
+    {
+        var context = await CreateContextAsync();
+
+        await AddVideoFilesAsync(context, videoCount: 500);
+
+        var page = await context.PageService.SearchFirstPageAsync(
+            CreateQuery(context, "фестиваль", videoSource: true));
+
+        try
+        {
+            using var cancellationSource =
+                new CancellationTokenSource();
+
+            cancellationSource.Cancel();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => context.PageService.SearchNextPageAsync(
+                    page.NextSession,
+                    cancellationSource.Token));
+
+            // Отмена порции не освобождает сессию: вызывающая сторона решает,
+            // повторить загрузку или освободить ресурсы.
+            Assert.Equal(
+                1,
+                GetActiveLeaseCount(context.PageService));
+
+            var nextPage =
+                await context.PageService.SearchNextPageAsync(
+                    page.NextSession);
+
+            Assert.Equal(200, nextPage.Matches.Count);
+
+            context.PageService.ReleaseSession(
+                nextPage.NextSession);
+
+            // Повторное освобождение идемпотентно.
+            context.PageService.ReleaseSession(
+                nextPage.NextSession);
+
+            Assert.Equal(
+                0,
+                GetActiveLeaseCount(context.PageService));
+
+            await Assert.ThrowsAsync<ObjectDisposedException>(
+                () => context.PageService.SearchNextPageAsync(
+                    nextPage.NextSession));
+
+            // После освобождения блокировка чтения не удерживается: запись из
+            // другого соединения проходит без ожидания.
+            await ExecuteWriteAsync(
+                context,
+                async (connection, transaction) =>
+                {
+                    await using var command =
+                        connection.CreateCommand();
+
+                    command.Transaction = transaction;
+
+                    command.CommandText =
+                        """
+                        CREATE TABLE ReleaseProbe (Id INTEGER);
+                        DROP TABLE ReleaseProbe;
+                        """;
+
+                    await command.ExecuteNonQueryAsync();
+                });
+        }
+        finally
+        {
+            context.PageService.ReleaseSession(page.NextSession);
+        }
+    }
+
+    [Fact]
+    public async Task ReleaseSession_IsIdempotentAndDoesNotCloseOtherSessions()
+    {
+        var context = await CreateContextAsync();
+
+        await AddVideoFilesAsync(context, videoCount: 1_000);
+
+        var query = CreateQuery(
+            context,
+            "фестиваль",
+            videoSource: true);
+
+        var firstSession =
+            await context.PageService.SearchFirstPageAsync(query);
+
+        var secondSession =
+            await context.PageService.SearchFirstPageAsync(query);
+
+        try
+        {
+            Assert.NotEqual(
+                firstSession.NextSession.SessionId,
+                secondSession.NextSession.SessionId);
+
+            Assert.Equal(
+                2,
+                GetActiveLeaseCount(context.PageService));
+
+            context.PageService.ReleaseSession(
+                firstSession.NextSession);
+
+            context.PageService.ReleaseSession(
+                firstSession.NextSession);
+
+            Assert.Equal(
+                1,
+                GetActiveLeaseCount(context.PageService));
+
+            var nextPage =
+                await context.PageService.SearchNextPageAsync(
+                    secondSession.NextSession);
+
+            Assert.Equal(200, nextPage.Matches.Count);
+
+            await Assert.ThrowsAsync<ObjectDisposedException>(
+                () => context.PageService.SearchNextPageAsync(
+                    firstSession.NextSession));
+
+            context.PageService.ReleaseSession(
+                nextPage.NextSession);
+        }
+        finally
+        {
+            context.PageService.ReleaseSession(
+                firstSession.NextSession);
+
+            context.PageService.ReleaseSession(
+                secondSession.NextSession);
+        }
+    }
+
+    [Fact]
+    public async Task LegacySearchAsync_ReleasesSessionLeaseInFinally()
+    {
+        var context = await CreateContextAsync();
+
+        await AddVideoFilesAsync(context, videoCount: 500);
+
+        var results = await context.SearchService.SearchAsync(
+            CreateQuery(context, "фестиваль", videoSource: true));
+
+        Assert.Equal(200, results.Count);
+
+        // Точечный поиск не возвращает сессию, поэтому не должен оставлять
+        // удерживаемое соединение.
+        Assert.Equal(
+            0,
+            GetActiveLeaseCount(context.PageService));
+    }
+
+    [Fact]
+    public async Task Dispose_ReleasesActiveSessionLeases()
+    {
+        var context = await CreateContextAsync();
+
+        await AddVideoFilesAsync(context, videoCount: 500);
+
+        var query = CreateQuery(
+            context,
+            "фестиваль",
+            videoSource: true);
+
+        var firstSession =
+            await context.PageService.SearchFirstPageAsync(query);
+
+        var secondSession =
+            await context.PageService.SearchFirstPageAsync(query);
+
+        Assert.Equal(
+            2,
+            GetActiveLeaseCount(context.PageService));
+
+        context.PageService.Dispose();
+
+        Assert.Equal(
+            0,
+            GetActiveLeaseCount(context.PageService));
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => context.PageService.SearchNextPageAsync(
+                firstSession.NextSession));
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => context.PageService.SearchNextPageAsync(
+                secondSession.NextSession));
+    }
+
+    [Fact]
+    public async Task Search_WithUnavailableUncSourcePath_ReturnsIndexedMatches()
+    {
+        var context = await CreateContextAsync();
+
+        var uncRoot = @"\\offline-vaf-test\archive";
+        var folderPath = Path.Combine(
+            uncRoot,
+            "2025",
+            "Фестиваль");
+        var sourceId = Guid.NewGuid();
+
+        await context.Repository.UpsertBatchAsync(
+            [
+                CreateFolder(
+                    context,
+                    folderPath,
+                    "Фестиваль сборка",
+                    rootSourceId: sourceId)
+            ]);
+
+        await context.VideoRepository.UpsertBatchAsync(
+            [
+                CreateVideo(
+                    context,
+                    folderPath,
+                    sourceId,
+                    "10_15_Фестиваль_сборка.mxf")
+            ]);
+
+        var query = new FolderSearchQuery(
+            "фестиваль",
+            FolderSearchMode.Smart,
+            DefaultPageSize,
+            RootSourceIds: [sourceId],
+            VideoFileRootSourceIds: [sourceId]);
+
+        var page = await context.PageService.SearchFirstPageAsync(query);
+
+        try
+        {
+            // Поиск идёт только по локальному файлу SQLite: недоступный
+            // UNC-путь источника не участвует и не проверяется.
+            Assert.Equal(1, page.FolderMatchCount);
+            Assert.Equal(1, page.VideoMatchCount);
+            Assert.Equal(2, page.Matches.Count);
+
+            Assert.Contains(
+                page.Matches,
+                match => match.Name ==
+                    "10_15_Фестиваль_сборка.mxf");
+        }
+        finally
+        {
+            context.PageService.ReleaseSession(page.NextSession);
+        }
+
+        Assert.True(
+            File.Exists(context.DatabasePath));
+
+        Assert.StartsWith(
+            _temporaryDirectory,
+            context.DatabasePath,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ---------------------------------------------------------------------
     // Инфраструктура теста
     // ---------------------------------------------------------------------
 
@@ -1184,6 +2046,8 @@ public sealed class SqliteFolderSearchPageServiceTests
                 NullLogger<
                     SqliteFolderSearchPageService>.Instance);
 
+        _pageServices.Add(pageService);
+
         var searchService =
             new SqliteFolderSearchService(pageService);
 
@@ -1277,8 +2141,191 @@ public sealed class SqliteFolderSearchPageServiceTests
         }.ToString();
     }
 
+    private static async Task ExecuteWriteAsync(
+        SearchTestContext context,
+        Func<SqliteConnection, SqliteTransaction, Task> write)
+    {
+        await using var connection = new SqliteConnection(
+            BuildConnectionString(
+                context,
+                SqliteOpenMode.ReadWriteCreate));
+
+        await connection.OpenAsync();
+
+        await using (var configuration =
+            connection.CreateCommand())
+        {
+            configuration.CommandText =
+                "PRAGMA busy_timeout = 5000;";
+
+            await configuration.ExecuteNonQueryAsync();
+        }
+
+        await using var transaction =
+            connection.BeginTransaction();
+
+        await write(connection, transaction);
+
+        await transaction.CommitAsync();
+    }
+
+    private static async Task InsertMatchingVideoAsync(
+        SearchTestContext context,
+        string name)
+    {
+        await ExecuteWriteAsync(
+            context,
+            (connection, transaction) =>
+                InsertVideoAsync(
+                    context,
+                    connection,
+                    transaction,
+                    GetVideoFolderPath(context, 0),
+                    name));
+    }
+
+    private static async Task InsertVideoAsync(
+        SearchTestContext context,
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string folderFullPath,
+        string name)
+    {
+        await using var command = connection.CreateCommand();
+
+        command.Transaction = transaction;
+
+        command.CommandText =
+            """
+            INSERT INTO VideoFiles
+            (
+                FullPath,
+                Name,
+                NormalizedName,
+                Extension,
+                SizeBytes,
+                LastWriteTimeUtc,
+                FolderFullPath,
+                RootSourceId,
+                IsAvailable,
+                LastSeenUtc
+            )
+            VALUES
+            (
+                $fullPath,
+                $name,
+                $normalizedName,
+                $extension,
+                $sizeBytes,
+                $lastWriteTimeUtc,
+                $folderFullPath,
+                $rootSourceId,
+                1,
+                $lastSeenUtc
+            );
+            """;
+
+        var timestamp = DateTimeOffset.UtcNow;
+
+        command.Parameters.AddWithValue(
+            "$fullPath",
+            Path.Combine(folderFullPath, name));
+
+        command.Parameters.AddWithValue("$name", name);
+
+        command.Parameters.AddWithValue(
+            "$normalizedName",
+            context.NormalizationService.Normalize(name));
+
+        command.Parameters.AddWithValue(
+            "$extension",
+            Path.GetExtension(name));
+
+        command.Parameters.AddWithValue("$sizeBytes", 1_000);
+
+        command.Parameters.AddWithValue(
+            "$lastWriteTimeUtc",
+            timestamp.ToString("O"));
+
+        command.Parameters.AddWithValue(
+            "$folderFullPath",
+            folderFullPath);
+
+        command.Parameters.AddWithValue(
+            "$rootSourceId",
+            context.VideoRootSourceId.ToString("D"));
+
+        command.Parameters.AddWithValue(
+            "$lastSeenUtc",
+            timestamp.ToString("O"));
+
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<
+        (long Count, long MaxId, string MaxLastSeenUtc)>
+        ReadVideoDiagnosticStampAsync(
+            SearchTestContext context)
+    {
+        await using var connection =
+            CreateReadOnlyConnection(context);
+
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+
+        command.CommandText =
+            """
+            SELECT
+                COUNT(*),
+                COALESCE(MAX(Id), 0),
+                COALESCE(MAX(LastSeenUtc), '')
+            FROM VideoFiles;
+            """;
+
+        await using var reader = await command.ExecuteReaderAsync();
+
+        Assert.True(await reader.ReadAsync());
+
+        return (
+            reader.GetInt64(0),
+            reader.GetInt64(1),
+            reader.GetString(2));
+    }
+
+    private static int GetActiveLeaseCount(
+        SqliteFolderSearchPageService pageService)
+    {
+        var field = typeof(SqliteFolderSearchPageService)
+            .GetField(
+                "_leases",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.NotNull(field);
+
+        var leases = field.GetValue(pageService);
+
+        Assert.NotNull(leases);
+
+        var count = leases.GetType()
+            .GetProperty("Count")?
+            .GetValue(leases);
+
+        return count is int value
+            ? value
+            : throw new InvalidOperationException(
+                "Could not read the active lease count.");
+    }
+
     public void Dispose()
     {
+        // Каждый тест создаёт собственный сервис; закрываем удерживаемые
+        // сессионные соединения до очистки пула и временного каталога.
+        foreach (var pageService in _pageServices)
+        {
+            pageService.Dispose();
+        }
+
         // Освобождается только пул этой тестовой базы: глобальный
         // SqliteConnection.ClearAllPools() затрагивает соединения других
         // параллельно выполняющихся тестов.

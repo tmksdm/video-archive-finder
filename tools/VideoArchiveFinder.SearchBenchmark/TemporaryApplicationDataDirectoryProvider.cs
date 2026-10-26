@@ -20,28 +20,71 @@ internal sealed class TemporaryApplicationDataDirectoryProvider
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
+        var databasePath = Path.Combine(
+            _directoryPath,
+            "Index",
+            "video-archive-finder.db");
+
+        ClearPool(
+            databasePath,
+            SqliteOpenMode.ReadOnly);
+
+        ClearPool(
+            databasePath,
+            SqliteOpenMode.ReadWriteCreate);
 
         if (!Directory.Exists(_directoryPath))
         {
             return;
         }
 
-        try
+        for (var attempt = 0; attempt < 5; attempt++)
         {
-            Directory.Delete(
-                _directoryPath,
-                recursive: true);
+            try
+            {
+                Directory.Delete(
+                    _directoryPath,
+                    recursive: true);
+
+                return;
+            }
+            catch (IOException) when (attempt < 4)
+            {
+                Thread.Sleep(50);
+            }
+            catch (UnauthorizedAccessException) when (attempt < 4)
+            {
+                Thread.Sleep(50);
+            }
+            catch (IOException)
+            {
+                Console.WriteLine(
+                    $"Не удалось удалить временную папку: {_directoryPath}");
+            }
+            catch (UnauthorizedAccessException)
+            {
+                Console.WriteLine(
+                    $"Нет доступа для удаления временной папки: {_directoryPath}");
+            }
         }
-        catch (IOException)
-        {
-            Console.WriteLine(
-                $"Не удалось удалить временную папку: {_directoryPath}");
-        }
-        catch (UnauthorizedAccessException)
-        {
-            Console.WriteLine(
-                $"Нет доступа для удаления временной папки: {_directoryPath}");
-        }
+    }
+
+    private static void ClearPool(
+        string databasePath,
+        SqliteOpenMode mode)
+    {
+        var connectionString =
+            new SqliteConnectionStringBuilder
+            {
+                DataSource = databasePath,
+                Mode = mode,
+                Cache = SqliteCacheMode.Shared,
+                Pooling = true
+            }.ToString();
+
+        using var connection =
+            new SqliteConnection(connectionString);
+
+        SqliteConnection.ClearPool(connection);
     }
 }

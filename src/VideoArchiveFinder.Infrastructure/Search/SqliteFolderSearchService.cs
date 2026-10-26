@@ -35,10 +35,25 @@ public sealed class SqliteFolderSearchService
         // Проверка запроса, нормализация, область источников, отмена и ведение
         // журнала выполняются постраничным сервисом: точечный поиск обязан
         // вести себя так же, как первая порция постраничного.
-        var page = await _folderSearchPageService
-            .SearchFirstPageAsync(query, cancellationToken)
-            .ConfigureAwait(false);
+        FolderSearchPage? page = null;
 
-        return page.Matches;
+        try
+        {
+            page = await _folderSearchPageService
+                .SearchFirstPageAsync(query, cancellationToken)
+                .ConfigureAwait(false);
+
+            return page.Matches;
+        }
+        finally
+        {
+            // Точечный поиск не возвращает сессию, поэтому её соединение
+            // освобождается при любом исходе.
+            if (page is not null)
+            {
+                _folderSearchPageService.ReleaseSession(
+                    page.NextSession);
+            }
+        }
     }
 }

@@ -30,6 +30,14 @@ public sealed record FolderSearchSession(
     FolderSearchCursor? FolderCursor,
     FolderSearchCursor? VideoCursor)
 {
+    /// <summary>
+    /// Непрозрачный идентификатор сессии, по которому сервис находит её
+    /// read-only соединение. Это не ресурс: запись можно копировать через
+    /// <c>with</c>, и идентификатор сохраняется во всех порциях одной сессии.
+    /// <see cref="Guid.Empty"/> означает сессию без удерживаемого соединения.
+    /// </summary>
+    public Guid SessionId { get; init; }
+
     /// <summary>Точное общее число совпадений по папкам и видеофайлам.</summary>
     public int TotalMatchCount =>
         FolderMatchCount + VideoMatchCount;

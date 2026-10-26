@@ -822,6 +822,7 @@ Text="{Binding IndexingStatusText}"
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
 
@@ -877,7 +878,9 @@ Text="{Binding IndexingStatusText}"
                                 <TreeView.ItemContainerStyle>
                                     <Style TargetType="TreeViewItem">
                                         <Setter Property="IsExpanded"
-                    Value="True"/>
+                    Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                                        <Setter Property="IsSelected"
+                    Value="{Binding IsSelected, Mode=TwoWay}"/>
                                         <Setter Property="HorizontalContentAlignment"
                     Value="Stretch"/>
                                         <Setter Property="Padding"
@@ -993,6 +996,47 @@ Text="{Binding IndexingStatusText}"
                                     </HierarchicalDataTemplate>
                                 </TreeView.ItemTemplate>
                             </TreeView>
+                            <StackPanel Grid.Row="3" Margin="0,8,0,0">
+                                <TextBlock Text="{Binding Search.SearchNotice}"
+                                           TextWrapping="Wrap"
+                                           Foreground="{DynamicResource AppSecondaryTextBrush}"
+                                           AutomationProperties.LiveSetting="Polite">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Margin" Value="0,0,0,8"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Search.SearchNotice}" Value="">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <Button x:Name="LoadMoreSearchResultsButton"
+                                        Command="{Binding Search.LoadMoreCommand}"
+                                        HorizontalAlignment="Left"
+                                        AutomationProperties.Name="Показать ещё результаты поиска">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                            <Setter Property="Content" Value="Показать ещё"/>
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Search.HasMoreResults}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Search.IsLoadingMore}" Value="True">
+                                                    <Setter Property="Content" Value="Загрузка…"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                                <Button x:Name="RefreshSearchResultsButton"
+                                        Content="Обновить поиск"
+                                        Command="{Binding Search.RefreshCommand}"
+                                        HorizontalAlignment="Left"
+                                        Visibility="{Binding Search.IsIndexChanged, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                            </StackPanel>
                         </Grid>
 
                         <GridSplitter x:Name="SearchResultsSplitter"

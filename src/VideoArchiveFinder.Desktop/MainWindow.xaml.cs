@@ -744,9 +744,19 @@ public partial class MainWindow : Window
     {
         ResetDragCandidates();
 
-        if (sender is not FrameworkElement element ||
-            element.DataContext is not
-                FolderSearchTreeNode selectedFolder)
+        if (sender is not FrameworkElement element)
+        {
+            return;
+        }
+
+        var selectedFolder = element.DataContext switch
+        {
+            FolderSearchTreeItem item => item.ToNode(),
+            FolderSearchTreeNode node => node,
+            _ => null
+        };
+
+        if (selectedFolder is null)
         {
             return;
         }

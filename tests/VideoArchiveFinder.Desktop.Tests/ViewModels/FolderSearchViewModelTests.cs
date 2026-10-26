@@ -1,6 +1,8 @@
-﻿using Microsoft.Extensions.Logging.Abstractions;
+﻿using System.Diagnostics;
+using Microsoft.Extensions.Logging.Abstractions;
 using VideoArchiveFinder.Application.Search;
 using VideoArchiveFinder.Desktop.ViewModels;
+using Xunit.Abstractions;
 
 namespace VideoArchiveFinder.Desktop.Tests.ViewModels;
 
@@ -16,7 +18,7 @@ namespace VideoArchiveFinder.Desktop.Tests.ViewModels;
 /// Служба поиска подставная, поэтому тесты проверяют логику модели
 /// представления, а не SQLite; сам постраничный поиск покрыт тестами Шага 1.
 /// </summary>
-public sealed class FolderSearchViewModelTests
+public sealed class FolderSearchViewModelTests(ITestOutputHelper output)
 {
     private static readonly Guid RootSourceId =
         Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -252,7 +254,7 @@ public sealed class FolderSearchViewModelTests
     }
 
     [Fact]
-    public async Task LoadMore_RebuildsTreeWithAllAccumulatedMatches()
+    public async Task LoadMore_AppendsTreeUsingOnlyCurrentPageContext()
     {
         var archive = CreateFolder(1, "Архив");
         var year = CreateFolder(2, "2025", parentFolderId: 1);
@@ -300,6 +302,11 @@ public sealed class FolderSearchViewModelTests
 
         Assert.True(viewModel.HasMoreResults);
 
+        var originalRoot = Assert.Single(viewModel.Results);
+        var originalChildren = originalRoot.Children;
+        originalRoot.IsExpanded = false;
+        originalRoot.IsSelected = true;
+
         viewModel.LoadMoreCommand.Execute(null);
 
         await WaitUntilAsync(
@@ -310,6 +317,10 @@ public sealed class FolderSearchViewModelTests
         var root = Assert.Single(viewModel.Results);
 
         Assert.Equal(1, root.Id);
+        Assert.Same(originalRoot, root);
+        Assert.Same(originalChildren, root.Children);
+        Assert.False(root.IsExpanded);
+        Assert.True(root.IsSelected);
 
         var matchIds = Flatten(viewModel.Results)
             .Where(node => node.IsMatch)
@@ -321,10 +332,9 @@ public sealed class FolderSearchViewModelTests
             new long[] { 10, 11, 12 },
             matchIds);
 
-        // Контекст запрашивался для всех накопленных совпадений, а не только
-        // для последней порции.
+        // Earlier pages already own their context; only the new page is read.
         Assert.Equal(
-            new long[] { 10, 11, 12 },
+            new long[] { 12 },
             contextProvider.LastMatchIds
                 .OrderBy(id => id)
                 .ToArray());
@@ -628,8 +638,257 @@ public sealed class FolderSearchViewModelTests
     }
 
     // ---------------------------------------------------------------------
-    // Вспомогательные методы
+    // Полнота выдачи и согласованность сессии
     // ---------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(201)]
+    [InlineData(633)]
+    [InlineData(1001)]
+    [InlineData(10000)]
+    public async Task LoadMore_ReachesEveryMatchWithoutResettingTree(int count)
+    {
+        using var viewModel = CreateSearchingViewModel(
+            CreateMatches(count), out var service);
+
+        await WaitUntilAsync(() => !viewModel.IsSearching);
+        var originalItem = viewModel.Results[0];
+        originalItem.IsExpanded = false;
+        originalItem.IsSelected = true;
+        var resets = 0;
+        viewModel.Results.CollectionChanged += (_, args) =>
+        {
+            if (args.Action == System.Collections.Specialized
+                .NotifyCollectionChangedAction.Reset)
+            {
+                resets++;
+            }
+        };
+
+        var paging = Stopwatch.StartNew();
+        var pageDurations = new List<double>();
+
+        while (viewModel.HasMoreResults)
+        {
+            var started = Stopwatch.GetTimestamp();
+            await viewModel.LoadMoreCommand.ExecuteAsync(null);
+            pageDurations.Add(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        }
+
+        paging.Stop();
+
+        Assert.Equal(count, viewModel.LoadedMatchCount);
+        Assert.Equal(count, viewModel.TotalMatchCount);
+        Assert.Equal(
+            Enumerable.Range(1, count).Select(id => (long)id),
+            Flatten(viewModel.Results).Where(node => node.IsMatch)
+                .Select(node => node.Id).Order());
+        Assert.Equal(0, resets);
+        Assert.Contains(originalItem, viewModel.Results);
+        Assert.False(originalItem.IsExpanded);
+        Assert.True(originalItem.IsSelected);
+        Assert.False(viewModel.LoadMoreCommand.CanExecute(null));
+        Assert.Single(service.ReleasedSessionIds.Distinct());
+        pageDurations.Sort();
+        output.WriteLine(
+            $"Synthetic VM, {count} matches: all next pages {paging.Elapsed.TotalMilliseconds:F2} ms; " +
+            $"page p95 {pageDurations[(int)Math.Ceiling(pageDurations.Count * 0.95) - 1]:F2} ms. " +
+            "Includes page tree construction/merge, excludes SQLite and WPF layout.");
+    }
+
+    [Fact]
+    public async Task IndexChange_KeepsShownTreeAndRequiresExplicitRefresh()
+    {
+        using var viewModel = CreateSearchingViewModel(
+            CreateMatches(633), out var service);
+        await WaitUntilAsync(() => !viewModel.IsSearching);
+        var root = viewModel.Results[0];
+        root.IsExpanded = false;
+        service.BeforeNextPageAsync = _ =>
+            throw new FolderSearchIndexChangedException(Guid.Empty);
+
+        await viewModel.LoadMoreCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.IsIndexChanged);
+        Assert.False(viewModel.HasMoreResults);
+        Assert.Equal(633, viewModel.TotalMatchCount);
+        Assert.Equal(200, viewModel.LoadedMatchCount);
+        Assert.Same(root, viewModel.Results[0]);
+        Assert.False(root.IsExpanded);
+        Assert.Contains("Индекс изменился", viewModel.SearchNotice);
+        Assert.Single(service.ReleasedSessionIds);
+        Assert.Equal(1, service.FirstPageCallCount);
+
+        viewModel.RefreshCommand.Execute(null);
+        await WaitUntilAsync(() => !viewModel.IsSearching);
+
+        Assert.Equal(2, service.FirstPageCallCount);
+        Assert.False(viewModel.IsIndexChanged);
+        Assert.True(viewModel.HasMoreResults);
+        Assert.Empty(viewModel.SearchNotice);
+    }
+
+    [Fact]
+    public async Task IndexChangeDuringContextRead_DoesNotPublishNewPage()
+    {
+        using var viewModel = CreateSearchingViewModel(
+            CreateMatches(201), out var service);
+        await WaitUntilAsync(() => !viewModel.IsSearching);
+        service.BeforeValidateAsync = (_, _) =>
+            throw new FolderSearchIndexChangedException(Guid.Empty);
+
+        await viewModel.LoadMoreCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.IsIndexChanged);
+        Assert.Equal(200, viewModel.LoadedMatchCount);
+        Assert.Equal(200, Flatten(viewModel.Results).Count());
+        Assert.Single(service.ReleasedSessionIds);
+    }
+
+    [Fact]
+    public async Task QueryChangeAndDispose_ReleaseOpenSessions()
+    {
+        var viewModel = CreateSearchingViewModel(
+            CreateMatches(633), out var service);
+        await WaitUntilAsync(() => !viewModel.IsSearching);
+
+        viewModel.SearchText = "новый";
+        await WaitUntilAsync(() => !viewModel.IsSearching);
+        Assert.Single(service.ReleasedSessionIds);
+
+        viewModel.Dispose();
+        viewModel.Dispose();
+        Assert.Equal(2, service.ReleasedSessionIds.Count);
+        Assert.Equal(2, service.ReleasedSessionIds.Distinct().Count());
+    }
+
+    [Fact]
+    public async Task FirstPageContextFailure_ReleasesUnpublishedSession()
+    {
+        var service = new StubFolderSearchPageService(CreateMatches(633))
+        {
+            BeforeValidateAsync = (_, _) =>
+                throw new InvalidOperationException("context changed")
+        };
+        using var viewModel = CreateViewModel(service);
+        viewModel.SetRootSourceIds([RootSourceId]);
+        viewModel.SearchText = "фестиваль";
+
+        await WaitUntilAsync(() => !viewModel.IsSearching);
+
+        Assert.Empty(viewModel.Results);
+        Assert.Single(service.ReleasedSessionIds);
+        Assert.Equal("Не удалось выполнить поиск", viewModel.ResultsSummary);
+    }
+
+    [Fact]
+    public async Task IndexChangeBeforeFirstPublication_StopsSearchingStatus()
+    {
+        var service = new StubFolderSearchPageService(CreateMatches(633))
+        {
+            BeforeValidateAsync = (_, _) =>
+                throw new FolderSearchIndexChangedException(Guid.Empty)
+        };
+        using var viewModel = CreateViewModel(service);
+        viewModel.SetRootSourceIds([RootSourceId]);
+        viewModel.SearchText = "фестиваль";
+
+        await WaitUntilAsync(() => !viewModel.IsSearching);
+
+        Assert.True(viewModel.IsIndexChanged);
+        Assert.False(viewModel.HasMoreResults);
+        Assert.Empty(viewModel.Results);
+        Assert.Contains("Поиск остановлен", viewModel.ResultsSummary);
+        Assert.DoesNotContain("результаты сохранены", viewModel.SearchNotice);
+        Assert.Single(service.ReleasedSessionIds);
+    }
+
+    [Fact]
+    public async Task LoadMore_AfterTransientFailure_RetriesOriginalCursor()
+    {
+        using var viewModel = CreateSearchingViewModel(
+            CreateMatches(201), out var service);
+        await WaitUntilAsync(() => !viewModel.IsSearching);
+        service.BeforeNextPageAsync = _ =>
+            throw new InvalidOperationException("transient failure");
+
+        await viewModel.LoadMoreCommand.ExecuteAsync(null);
+        Assert.Equal(200, viewModel.LoadedMatchCount);
+        Assert.True(viewModel.HasMoreResults);
+        Assert.NotEmpty(viewModel.SearchNotice);
+        Assert.Empty(service.ReleasedSessionIds);
+
+        await viewModel.LoadMoreCommand.ExecuteAsync(null);
+
+        Assert.Equal(201, viewModel.LoadedMatchCount);
+        Assert.Equal(201, Flatten(viewModel.Results).Select(node => node.Id)
+            .Distinct().Count());
+        Assert.False(viewModel.HasMoreResults);
+        Assert.Empty(viewModel.SearchNotice);
+        Assert.Single(service.ReleasedSessionIds);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InFlightNextPage_AfterQueryChangeOrDispose_IsNotPublished(
+        bool dispose)
+    {
+        var entered = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var originalMatches = CreateMatches(201);
+        var service = new StubFolderSearchPageService(query =>
+            query.Text == "новый"
+                ? [CreateFolder(9000, "Новый")]
+                : originalMatches);
+        using var viewModel = CreateViewModel(service);
+        viewModel.SetRootSourceIds([RootSourceId]);
+        viewModel.SearchText = "фестиваль";
+        await WaitUntilAsync(() => !viewModel.IsSearching);
+        service.BeforeNextPageAsync = _ =>
+        {
+            entered.TrySetResult();
+            return release.Task;
+        };
+        var loading = viewModel.LoadMoreCommand.ExecuteAsync(null);
+
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+
+            if (dispose)
+            {
+                viewModel.Dispose();
+            }
+            else
+            {
+                viewModel.SearchText = "новый";
+                await WaitUntilAsync(() => !viewModel.IsSearching);
+            }
+        }
+        finally
+        {
+            release.TrySetResult();
+            await loading.WaitAsync(TimeSpan.FromSeconds(3));
+        }
+
+        if (dispose)
+        {
+            Assert.Equal(200, viewModel.LoadedMatchCount);
+            Assert.Equal(200, viewModel.Results.Count);
+            Assert.Single(service.ReleasedSessionIds);
+        }
+        else
+        {
+            Assert.Equal(1, viewModel.LoadedMatchCount);
+            Assert.Equal(9000, Assert.Single(viewModel.Results).Id);
+            Assert.Equal(2, service.ReleasedSessionIds.Count);
+        }
+    }
+
+    // Вспомогательные методы
 
     private static FolderSearchViewModel CreateViewModel(
         IFolderSearchPageService pageService,
@@ -696,8 +955,8 @@ public sealed class FolderSearchViewModelTests
             .ToArray();
     }
 
-    private static IEnumerable<FolderSearchTreeNode> Flatten(
-        IEnumerable<FolderSearchTreeNode> nodes)
+    private static IEnumerable<FolderSearchTreeItem> Flatten(
+        IEnumerable<FolderSearchTreeItem> nodes)
     {
         foreach (var node in nodes)
         {

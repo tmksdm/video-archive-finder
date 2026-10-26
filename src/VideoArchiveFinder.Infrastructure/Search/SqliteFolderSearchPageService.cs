@@ -14,9 +14,14 @@ namespace VideoArchiveFinder.Infrastructure.Search;
 /// совпадения, ни их ключи сортировки. Порядок выдачи и состав совпадений
 /// совпадают с <see cref="SqliteFolderSearchService"/>: сначала папки, затем
 /// видеофайлы, общий бюджет порции делится между потоками.
+///
+/// Сессия поиска владеет одним read-only соединением. На каждой порции в одной
+/// короткой транзакции читаются <c>PRAGMA data_version</c> и сама порция; если
+/// версия отличается от снятой при создании сессии, порция не читается и
+/// подгрузка останавливается (<see cref="FolderSearchIndexChangedException"/>).
 /// </summary>
 public sealed class SqliteFolderSearchPageService
-    : IFolderSearchPageService
+    : IFolderSearchPageService, IDisposable
 {
     private readonly IndexDatabasePathProvider
         _databasePathProvider;
@@ -29,6 +34,13 @@ public sealed class SqliteFolderSearchPageService
 
     private readonly ILogger<SqliteFolderSearchPageService>
         _logger;
+
+    private readonly object _leaseGate = new();
+
+    private readonly Dictionary<Guid, SessionLease>
+        _leases = [];
+
+    private bool _disposed;
 
     public SqliteFolderSearchPageService(
         IndexDatabasePathProvider databasePathProvider,
@@ -51,6 +63,8 @@ public sealed class SqliteFolderSearchPageService
         FolderSearchSql.ValidateQuery(query);
 
         cancellationToken.ThrowIfCancellationRequested();
+
+        ThrowIfDisposed();
 
         var normalizedQuery =
             _textNormalizationService.Normalize(query.Text);
@@ -84,54 +98,84 @@ public sealed class SqliteFolderSearchPageService
             (rootSourceIds is { Length: 0 } &&
              videoFileRootSourceIds is not { Length: > 0 }))
         {
+            // Пустой выдаче соединение не нужно: SessionId остаётся
+            // Guid.Empty, и ValidateSessionAsync отличает такую сессию от
+            // освобождённой сессии, у которой соединение было.
             return CreateEmptyPage(session);
         }
 
+        session = session with
+        {
+            SessionId = Guid.NewGuid()
+        };
+
+        SessionLease? lease = null;
+        var keepLease = false;
+
         try
         {
-            await using var connection = CreateConnection();
+            var connection = CreateConnection();
 
-            await connection
-                .OpenAsync(cancellationToken)
-                .ConfigureAwait(false);
+            try
+            {
+                await connection
+                    .OpenAsync(cancellationToken)
+                    .ConfigureAwait(false);
 
-            await ConfigureConnectionAsync(
-                    connection,
-                    cancellationToken)
-                .ConfigureAwait(false);
+                await ConfigureConnectionAsync(
+                        connection,
+                        cancellationToken)
+                    .ConfigureAwait(false);
 
-            var folderMatchCount =
-                rootSourceIds is { Length: 0 }
-                    ? 0
-                    : await CountFoldersAsync(
+                // S0 снимается вне транзакции, как в разделе 4.6: сверка
+                // каждой порции выполняется уже внутри её транзакции.
+                var initialDataVersion =
+                    await ReadDataVersionAsync(
                             connection,
-                            session,
-                            normalizedQuery,
                             cancellationToken)
                         .ConfigureAwait(false);
 
-            var videoMatchCount =
-                videoFileRootSourceIds is { Length: > 0 }
-                    ? await CountVideoFilesAsync(
-                            connection,
-                            session,
-                            normalizedQuery,
-                            cancellationToken)
-                        .ConfigureAwait(false)
-                    : 0;
-
-            var countedSession = session with
-            {
-                FolderMatchCount = folderMatchCount,
-                VideoMatchCount = videoMatchCount
-            };
-
-            return await LoadPageAsync(
+                var candidate = new SessionLease(
+                    session.SessionId,
                     connection,
-                    countedSession,
-                    normalizedQuery,
-                    cancellationToken)
+                    initialDataVersion);
+
+                if (!TryRegisterLease(candidate))
+                {
+                    candidate.RequestRelease();
+
+                    throw new ObjectDisposedException(
+                        nameof(SqliteFolderSearchPageService));
+                }
+
+                lease = candidate;
+            }
+            catch
+            {
+                connection.Dispose();
+
+                throw;
+            }
+
+            var page = await ExecuteVersionedReadAsync(
+                    lease,
+                    cancellationToken,
+                    connectionInLease => ReadFirstPageAsync(
+                        connectionInLease,
+                        session,
+                        normalizedQuery,
+                        cancellationToken))
                 .ConfigureAwait(false);
+
+            // Сессия живёт до ReleaseSession/ValidateSessionAsync: даже
+            // последняя страница не освобождает соединение автоматически.
+            keepLease = true;
+
+            return page;
+        }
+        catch (FolderSearchIndexChangedException)
+        {
+            throw;
         }
         catch (OperationCanceledException)
         {
@@ -149,6 +193,13 @@ public sealed class SqliteFolderSearchPageService
 
             throw;
         }
+        finally
+        {
+            if (lease is not null && !keepLease)
+            {
+                ReleaseLease(lease);
+            }
+        }
     }
 
     public async Task<FolderSearchPage> SearchNextPageAsync(
@@ -159,9 +210,20 @@ public sealed class SqliteFolderSearchPageService
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        ThrowIfDisposed();
+
         if (!session.HasMoreResults)
         {
             return CreateEmptyPage(session);
+        }
+
+        var lease = FindLease(session.SessionId);
+
+        if (lease is null)
+        {
+            throw new ObjectDisposedException(
+                nameof(FolderSearchSession),
+                "Сессия поиска уже освобождена.");
         }
 
         var normalizedQuery =
@@ -169,23 +231,19 @@ public sealed class SqliteFolderSearchPageService
 
         try
         {
-            await using var connection = CreateConnection();
-
-            await connection
-                .OpenAsync(cancellationToken)
+            return await ExecuteVersionedReadAsync(
+                    lease,
+                    cancellationToken,
+                    connection => LoadPageAsync(
+                        connection,
+                        session,
+                        normalizedQuery,
+                        cancellationToken))
                 .ConfigureAwait(false);
-
-            await ConfigureConnectionAsync(
-                    connection,
-                    cancellationToken)
-                .ConfigureAwait(false);
-
-            return await LoadPageAsync(
-                    connection,
-                    session,
-                    normalizedQuery,
-                    cancellationToken)
-                .ConfigureAwait(false);
+        }
+        catch (FolderSearchIndexChangedException)
+        {
+            throw;
         }
         catch (OperationCanceledException)
         {
@@ -205,6 +263,119 @@ public sealed class SqliteFolderSearchPageService
         }
     }
 
+    public async Task ValidateSessionAsync(
+        FolderSearchSession session,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        ThrowIfDisposed();
+
+        if (session.SessionId == Guid.Empty)
+        {
+            // Пустая выдача не создаёт соединение: проверять нечего.
+            return;
+        }
+
+        var lease = FindLease(session.SessionId);
+
+        if (lease is null || lease.IsReleaseRequestedOrReleased)
+        {
+            throw new ObjectDisposedException(
+                nameof(FolderSearchSession),
+                "Сессия поиска уже освобождена или неизвестна.");
+        }
+
+        try
+        {
+            // Проверка версии в отдельной короткой транзакции на том же
+            // соединении: так изменение, закоммиченное после последней порции,
+            // обнаруживается до публикации результатов.
+            await ExecuteVersionedReadAsync(
+                    lease,
+                    cancellationToken,
+                    static _ => Task.FromResult(true))
+                .ConfigureAwait(false);
+        }
+        catch (ObjectDisposedException)
+        {
+            // Освобождение обогнало проверку: сессия больше не действительна.
+            throw;
+        }
+        catch (FolderSearchIndexChangedException)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation(
+                "Search session validation was cancelled.");
+
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                exception,
+                "Could not validate search session {SessionId}.",
+                session.SessionId);
+
+            throw;
+        }
+    }
+
+    public void ReleaseSession(FolderSearchSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        if (session.SessionId == Guid.Empty)
+        {
+            return;
+        }
+
+        SessionLease? lease = null;
+
+        lock (_leaseGate)
+        {
+            if (_leases.TryGetValue(
+                    session.SessionId,
+                    out var registered))
+            {
+                lease = registered;
+
+                _leases.Remove(session.SessionId);
+            }
+        }
+
+        lease?.RequestRelease();
+    }
+
+    public void Dispose()
+    {
+        SessionLease[] leases;
+
+        lock (_leaseGate)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+
+            leases = _leases.Values.ToArray();
+
+            _leases.Clear();
+        }
+
+        foreach (var lease in leases)
+        {
+            lease.RequestRelease();
+        }
+    }
+
     private static FolderSearchPage CreateEmptyPage(
         FolderSearchSession session)
     {
@@ -215,6 +386,117 @@ public sealed class SqliteFolderSearchPageService
             FolderLoadedCount: session.FolderLoadedCount,
             VideoLoadedCount: session.VideoLoadedCount,
             NextSession: session);
+    }
+
+    private async Task<FolderSearchPage> ReadFirstPageAsync(
+        SqliteConnection connection,
+        FolderSearchSession session,
+        string normalizedQuery,
+        CancellationToken cancellationToken)
+    {
+        var folderMatchCount =
+            session.RootSourceIds is { Count: 0 }
+                ? 0
+                : await CountFoldersAsync(
+                        connection,
+                        session,
+                        normalizedQuery,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+        var videoMatchCount =
+            session.VideoFileRootSourceIds is not { Count: > 0 }
+                ? 0
+                : await CountVideoFilesAsync(
+                        connection,
+                        session,
+                        normalizedQuery,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+        var countedSession = session with
+        {
+            FolderMatchCount = folderMatchCount,
+            VideoMatchCount = videoMatchCount
+        };
+
+        return await LoadPageAsync(
+                connection,
+                countedSession,
+                normalizedQuery,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Выполняет чтение в короткой транзакции: отложенный <c>BEGIN</c>, затем
+    /// <c>PRAGMA data_version</c> на том же соединении, сверка с S0 и только
+    /// после неё — сама порция. Любое изменение, закоммиченное другим
+    /// соединением, останавливает чтение; тройка-диагностика не участвует в
+    /// решении.
+    /// </summary>
+    private async Task<T> ExecuteVersionedReadAsync<T>(
+        SessionLease lease,
+        CancellationToken cancellationToken,
+        Func<SqliteConnection, Task<T>> read)
+    {
+        await lease.Gate
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        SqliteTransaction? transaction = null;
+
+        try
+        {
+            lease.EnterOperation();
+
+            transaction = lease.Connection.BeginTransaction(deferred: true);
+
+            var currentDataVersion =
+                await ReadDataVersionAsync(
+                        lease.Connection,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+            if (currentDataVersion != lease.InitialDataVersion)
+            {
+                TryRollback(transaction);
+                transaction.Dispose();
+                transaction = null;
+
+                lease.MarkIndexChanged();
+
+                _logger.LogWarning(
+                    "Search index changed during session {SessionId}: " +
+                    "data_version was {InitialDataVersion}, now {CurrentDataVersion}. " +
+                    "Further paging is stopped.",
+                    lease.SessionId,
+                    lease.InitialDataVersion,
+                    currentDataVersion);
+
+                throw new FolderSearchIndexChangedException(
+                    lease.SessionId);
+            }
+
+            var result = await read(lease.Connection)
+                .ConfigureAwait(false);
+
+            transaction.Commit();
+            transaction.Dispose();
+            transaction = null;
+
+            return result;
+        }
+        finally
+        {
+            if (transaction is not null)
+            {
+                TryRollback(transaction);
+                transaction.Dispose();
+            }
+
+            lease.ExitOperation();
+        }
     }
 
     private async Task<FolderSearchPage> LoadPageAsync(
@@ -566,7 +848,12 @@ public sealed class SqliteFolderSearchPageService
 
                 Mode = SqliteOpenMode.ReadOnly,
                 Cache = SqliteCacheMode.Shared,
-                Pooling = true
+
+                // Сессия живёт долго, а после ReleaseSession её native handle
+                // обязан закрыться сразу: иначе Windows не даст заменить или
+                // удалить файл индекса, а глобальный ClearAllPools старых
+                // тестов мог бы влиять на новые сессии.
+                Pooling = false
             }.ToString();
 
         return new SqliteConnection(connectionString);
@@ -589,7 +876,218 @@ public sealed class SqliteFolderSearchPageService
             .ConfigureAwait(false);
     }
 
+    private static async Task<long> ReadDataVersionAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+
+        command.CommandText = "PRAGMA data_version;";
+
+        var result = await command
+            .ExecuteScalarAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return Convert.ToInt64(result);
+    }
+
+    private static void TryRollback(
+        SqliteTransaction transaction)
+    {
+        try
+        {
+            transaction.Rollback();
+        }
+        catch (InvalidOperationException)
+        {
+            // Транзакция уже завершена.
+        }
+        catch (SqliteException)
+        {
+            // Соединение уже не позволяет откатить транзакцию.
+        }
+    }
+
+    private bool TryRegisterLease(SessionLease lease)
+    {
+        lock (_leaseGate)
+        {
+            if (_disposed)
+            {
+                return false;
+            }
+
+            _leases.Add(lease.SessionId, lease);
+
+            return true;
+        }
+    }
+
+    private SessionLease? FindLease(Guid sessionId)
+    {
+        if (sessionId == Guid.Empty)
+        {
+            return null;
+        }
+
+        lock (_leaseGate)
+        {
+            return _leases.TryGetValue(
+                    sessionId,
+                    out var lease)
+                ? lease
+                : null;
+        }
+    }
+
+    private void ReleaseLease(SessionLease lease)
+    {
+        lock (_leaseGate)
+        {
+            if (_leases.TryGetValue(
+                    lease.SessionId,
+                    out var registered) &&
+                ReferenceEquals(registered, lease))
+            {
+                _leases.Remove(lease.SessionId);
+            }
+        }
+
+        lease.RequestRelease();
+    }
+
+    private void ThrowIfDisposed()
+    {
+        lock (_leaseGate)
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(
+                    nameof(SqliteFolderSearchPageService));
+            }
+        }
+    }
+
     private sealed record StreamPage(
         IReadOnlyList<FolderSearchResult> Matches,
         FolderSearchCursor? NextCursor);
+
+    /// <summary>
+    /// Владелец read-only соединения одной сессии. Операции и освобождение
+    /// сериализуются семафором; освобождение, пришедшее во время операции, не
+    /// закрывает занятое соединение, а откладывается до её завершения.
+    /// </summary>
+    private sealed class SessionLease
+    {
+        private readonly object _stateGate = new();
+
+        private readonly SqliteConnection _connection;
+
+        private bool _operationActive;
+        private bool _releaseRequested;
+        private bool _released;
+        private bool _indexChanged;
+
+        public SessionLease(
+            Guid sessionId,
+            SqliteConnection connection,
+            long initialDataVersion)
+        {
+            SessionId = sessionId;
+            _connection = connection;
+            InitialDataVersion = initialDataVersion;
+        }
+
+        public Guid SessionId { get; }
+
+        public long InitialDataVersion { get; }
+
+        public SemaphoreSlim Gate { get; } = new(1, 1);
+
+        public SqliteConnection Connection => _connection;
+
+        public bool IsReleaseRequestedOrReleased
+        {
+            get
+            {
+                lock (_stateGate)
+                {
+                    return _releaseRequested || _released;
+                }
+            }
+        }
+
+        public void EnterOperation()
+        {
+            lock (_stateGate)
+            {
+                if (_released || _releaseRequested)
+                {
+                    throw new ObjectDisposedException(
+                        nameof(FolderSearchSession),
+                        "Сессия поиска уже освобождена.");
+                }
+
+                if (_indexChanged)
+                {
+                    throw new FolderSearchIndexChangedException(
+                        SessionId);
+                }
+
+                _operationActive = true;
+            }
+        }
+
+        public void ExitOperation()
+        {
+            bool close;
+
+            lock (_stateGate)
+            {
+                _operationActive = false;
+                close = _releaseRequested && !_released;
+
+                if (close)
+                {
+                    _released = true;
+                }
+            }
+
+            if (close)
+            {
+                _connection.Dispose();
+            }
+
+            Gate.Release();
+        }
+
+        public void MarkIndexChanged()
+        {
+            lock (_stateGate)
+            {
+                _indexChanged = true;
+            }
+        }
+
+        public void RequestRelease()
+        {
+            bool close;
+
+            lock (_stateGate)
+            {
+                _releaseRequested = true;
+                close = !_operationActive && !_released;
+
+                if (close)
+                {
+                    _released = true;
+                }
+            }
+
+            if (close)
+            {
+                _connection.Dispose();
+            }
+        }
+    }
 }

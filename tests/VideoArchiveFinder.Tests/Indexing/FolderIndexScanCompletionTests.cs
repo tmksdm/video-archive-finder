@@ -1,8 +1,8 @@
-﻿using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Logging.Abstractions;
+﻿using Microsoft.Extensions.Logging.Abstractions;
 using VideoArchiveFinder.Application.Indexing;
 using VideoArchiveFinder.Application.Storage;
 using VideoArchiveFinder.Infrastructure.Indexing;
+using VideoArchiveFinder.Tests;
 
 namespace VideoArchiveFinder.Tests.Indexing;
 
@@ -331,7 +331,8 @@ public sealed class FolderIndexScanCompletionTests
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
+        SqliteTestDatabasePools.ClearForTemporaryDirectory(
+            _temporaryDirectory);
 
         if (Directory.Exists(_temporaryDirectory))
         {

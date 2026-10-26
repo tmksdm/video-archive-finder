@@ -17,8 +17,9 @@ namespace VideoArchiveFinder.Application.Search;
 /// Сколько совпадений по видеофайлам выдано с учётом этой порции.
 /// </param>
 /// <param name="NextSession">
-/// Состояние для следующей порции. Если <see cref="HasMoreResults"/> ложно,
-/// следующей порции нет и значение не используется.
+/// Состояние сессии, используемое для следующей порции и проверки версии перед
+/// публикацией. Даже после последней порции вызывающая сторона освобождает его
+/// через <see cref="IFolderSearchPageService.ReleaseSession"/>.
 /// </param>
 public sealed record FolderSearchPage(
     IReadOnlyList<FolderSearchResult> Matches,

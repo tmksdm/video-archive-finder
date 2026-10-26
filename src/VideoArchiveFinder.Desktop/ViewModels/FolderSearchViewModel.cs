@@ -13,11 +13,8 @@ namespace VideoArchiveFinder.Desktop.ViewModels;
 /// порции догружает команда «Показать ещё» по курсору сессии. Счётчики берутся
 /// из порции, то есть считают совпадения, а не контекстные узлы дерева.
 ///
-/// Временное ограничение Шага 3 плана
-/// (<c>docs/SEARCH_COMPLETENESS_AUDIT.md</c>): накопленные совпадения передаются
-/// в существующий <see cref="FolderSearchTreeBuilder"/>, поэтому дерево при
-/// подгрузке пересобирается целиком, а раскрытие и прокрутка не сохраняются.
-/// Инкрементальное дописывание узлов — Шаг 4.
+/// Дерево дополняется только узлами очередной порции: уже показанные элементы,
+/// их раскрытие и выделение сохраняются.
 /// </summary>
 public partial class FolderSearchViewModel
     : ObservableObject, IDisposable
@@ -47,12 +44,7 @@ public partial class FolderSearchViewModel
     private IReadOnlyCollection<Guid> _rootSourceIds = [];
     private IReadOnlyCollection<Guid> _videoFileRootSourceIds = [];
 
-    /// <summary>
-    /// Совпадения, показанные с учётом последней опубликованной порции.
-    /// Заменяется целиком при публикации, поэтому устаревшая операция не может
-    /// испортить состояние актуального поиска.
-    /// </summary>
-    private List<FolderSearchResult> _loadedMatches = [];
+    private readonly FolderSearchTreeMerger _treeMerger = new();
 
     private FolderSearchSession? _session;
     private int _searchVersion;
@@ -85,6 +77,12 @@ public partial class FolderSearchViewModel
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(LoadMoreCommand))]
     private bool _hasMoreResults;
+
+    [ObservableProperty]
+    private string _searchNotice = string.Empty;
+
+    [ObservableProperty]
+    private bool _isIndexChanged;
 
     public FolderSearchViewModel(
         IFolderSearchPageService folderSearchPageService,
@@ -127,11 +125,8 @@ public partial class FolderSearchViewModel
         _debounceMilliseconds = debounceMilliseconds;
     }
 
-    public ObservableCollection<FolderSearchTreeNode>
-        Results
-    {
-        get;
-    } = [];
+    public ObservableCollection<FolderSearchTreeItem> Results =>
+        _treeMerger.Roots;
 
     public IReadOnlyList<SearchModeOption> SearchModes
     {
@@ -232,6 +227,8 @@ public partial class FolderSearchViewModel
         int version,
         CancellationToken cancellationToken)
     {
+        FolderSearchSession? receivedSession = null;
+
         try
         {
             await Task.Delay(
@@ -245,54 +242,37 @@ public partial class FolderSearchViewModel
                 _rootSourceIds,
                 _videoFileRootSourceIds);
 
-            var page =
-                await _folderSearchPageService
-                    .SearchFirstPageAsync(
-                        query,
-                        cancellationToken);
+            var (page, resultTree) = await ReadPageTreeAsync(
+                query,
+                session: null,
+                cancellationToken);
+
+            receivedSession = page.NextSession;
 
             if (version != _searchVersion ||
                 _isDisposed)
             {
                 return;
             }
-
-            var matches =
-                new List<FolderSearchResult>(page.Matches);
-
-            var contextFolders =
-                await _folderSearchContextProvider
-                    .GetContextFoldersAsync(
-                        matches,
-                        cancellationToken);
-
-            if (version != _searchVersion ||
-                _isDisposed)
-            {
-                return;
-            }
-
-            var resultTree =
-                _folderSearchTreeBuilder.Build(
-                    matches,
-                    contextFolders,
-                    query.Text,
-                    query.Mode);
-
-            if (version != _searchVersion ||
-                _isDisposed)
-            {
-                return;
-            }
-
-            _loadedMatches = matches;
-            _session = page.NextSession;
 
             PublishResults(
                 resultTree,
                 page.TotalMatchCount,
                 page.LoadedMatchCount,
                 page.HasMoreResults);
+
+            if (page.HasMoreResults)
+            {
+                _session = receivedSession;
+                receivedSession = null;
+            }
+        }
+        catch (FolderSearchIndexChangedException)
+        {
+            if (version == _searchVersion && !_isDisposed)
+            {
+                StopForIndexChange();
+            }
         }
         catch (OperationCanceledException)
         {
@@ -315,6 +295,11 @@ public partial class FolderSearchViewModel
         }
         finally
         {
+            if (receivedSession is not null)
+            {
+                _folderSearchPageService.ReleaseSession(receivedSession);
+            }
+
             if (version == _searchVersion &&
                 !_isDisposed)
             {
@@ -328,6 +313,12 @@ public partial class FolderSearchViewModel
         return !_isDisposed &&
                !IsLoadingMore &&
                HasMoreResults;
+    }
+
+    [RelayCommand]
+    private void Refresh()
+    {
+        QueueSearch();
     }
 
     [RelayCommand(CanExecute = nameof(CanLoadMore))]
@@ -351,59 +342,47 @@ public partial class FolderSearchViewModel
         var cancellationToken = cancellation.Token;
 
         IsLoadingMore = true;
+        SearchNotice = string.Empty;
 
         try
         {
-            var page =
-                await _folderSearchPageService
-                    .SearchNextPageAsync(
-                        session,
-                        cancellationToken);
+            var query = new FolderSearchQuery(
+                session.QueryText,
+                session.Mode,
+                session.PageSize,
+                session.RootSourceIds,
+                session.VideoFileRootSourceIds);
+
+            var (page, resultTree) = await ReadPageTreeAsync(
+                query,
+                session,
+                cancellationToken);
 
             if (version != _searchVersion ||
                 _isDisposed)
             {
                 return;
             }
-
-            var matches = new List<FolderSearchResult>(
-                _loadedMatches);
-
-            matches.AddRange(page.Matches);
-
-            var contextFolders =
-                await _folderSearchContextProvider
-                    .GetContextFoldersAsync(
-                        matches,
-                        cancellationToken);
-
-            if (version != _searchVersion ||
-                _isDisposed)
-            {
-                return;
-            }
-
-            var resultTree =
-                _folderSearchTreeBuilder.Build(
-                    matches,
-                    contextFolders,
-                    session.QueryText,
-                    session.Mode);
-
-            if (version != _searchVersion ||
-                _isDisposed)
-            {
-                return;
-            }
-
-            _loadedMatches = matches;
-            _session = page.NextSession;
 
             PublishResults(
                 resultTree,
                 page.TotalMatchCount,
                 page.LoadedMatchCount,
                 page.HasMoreResults);
+
+            _session = page.HasMoreResults ? page.NextSession : null;
+
+            if (!page.HasMoreResults)
+            {
+                _folderSearchPageService.ReleaseSession(session);
+            }
+        }
+        catch (FolderSearchIndexChangedException)
+        {
+            if (version == _searchVersion && !_isDisposed)
+            {
+                StopForIndexChange();
+            }
         }
         catch (OperationCanceledException)
         {
@@ -419,6 +398,9 @@ public partial class FolderSearchViewModel
 
             // Показанное дерево и счётчики сохраняются: неудачная подгрузка
             // не должна скрывать уже найденные совпадения.
+            SearchNotice = "Не удалось загрузить следующую порцию. " +
+                "Повторите попытку кнопкой «Показать ещё».";
+
             _logger.LogError(
                 exception,
                 "Could not load the next folder search page.");
@@ -439,12 +421,7 @@ public partial class FolderSearchViewModel
         int loadedMatchCount,
         bool hasMoreResults)
     {
-        Results.Clear();
-
-        foreach (var rootNode in resultTree)
-        {
-            Results.Add(rootNode);
-        }
+        _treeMerger.Append(resultTree);
 
         TotalMatchCount = totalMatchCount;
         LoadedMatchCount = loadedMatchCount;
@@ -458,16 +435,86 @@ public partial class FolderSearchViewModel
 
     private void ResetSearchState()
     {
+        if (_session is not null)
+        {
+            _folderSearchPageService.ReleaseSession(_session);
+        }
+
         _session = null;
-        _loadedMatches = [];
 
         TotalMatchCount = 0;
         LoadedMatchCount = 0;
         HasMoreResults = false;
         IsLoadingMore = false;
         IsSearching = false;
+        IsIndexChanged = false;
+        SearchNotice = string.Empty;
 
-        Results.Clear();
+        _treeMerger.Clear();
+    }
+
+    private Task<(FolderSearchPage Page, IReadOnlyList<FolderSearchTreeNode> Tree)>
+        ReadPageTreeAsync(
+            FolderSearchQuery query,
+            FolderSearchSession? session,
+            CancellationToken cancellationToken)
+    {
+        // SQLite's async API can execute synchronously. Keep both SQL and
+        // per-page tree construction off the dispatcher; only Append touches UI.
+        return Task.Run(async () =>
+        {
+            var page = session is null
+                ? await _folderSearchPageService.SearchFirstPageAsync(
+                    query, cancellationToken)
+                : await _folderSearchPageService.SearchNextPageAsync(
+                    session, cancellationToken);
+
+            try
+            {
+                var context = await _folderSearchContextProvider
+                    .GetContextFoldersAsync(page.Matches, cancellationToken);
+
+                var tree = _folderSearchTreeBuilder.Build(
+                    page.Matches, context, query.Text, query.Mode);
+
+                await _folderSearchPageService.ValidateSessionAsync(
+                    page.NextSession, cancellationToken);
+
+                cancellationToken.ThrowIfCancellationRequested();
+                return (page, tree);
+            }
+            catch
+            {
+                if (session is null)
+                {
+                    _folderSearchPageService.ReleaseSession(page.NextSession);
+                }
+
+                throw;
+            }
+        }, cancellationToken);
+    }
+
+    private void StopForIndexChange()
+    {
+        if (_session is not null)
+        {
+            _folderSearchPageService.ReleaseSession(_session);
+            _session = null;
+        }
+
+        HasMoreResults = false;
+        IsIndexChanged = true;
+
+        if (LoadedMatchCount == 0)
+        {
+            ResultsSummary = "Поиск остановлен: индекс изменился";
+        }
+
+        SearchNotice = (LoadedMatchCount > 0
+            ? "Индекс изменился. Найденные результаты сохранены. "
+            : "Индекс изменился до завершения поиска. ") +
+            "Нажмите «Обновить поиск», чтобы получить актуальную выдачу.";
     }
 
     private void ReleaseCancellation(
@@ -500,6 +547,12 @@ public partial class FolderSearchViewModel
 
         cancellation?.Cancel();
         cancellation?.Dispose();
+
+        if (_session is not null)
+        {
+            _folderSearchPageService.ReleaseSession(_session);
+            _session = null;
+        }
     }
 
     public sealed record SearchModeOption(

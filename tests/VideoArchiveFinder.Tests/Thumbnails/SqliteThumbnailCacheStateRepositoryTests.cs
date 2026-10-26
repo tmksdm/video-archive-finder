@@ -1,9 +1,10 @@
-﻿using Microsoft.Data.Sqlite;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using VideoArchiveFinder.Application.Storage;
 using VideoArchiveFinder.Application.VideoFiles;
 using VideoArchiveFinder.Infrastructure.Indexing;
 using VideoArchiveFinder.Infrastructure.Thumbnails;
+using VideoArchiveFinder.Tests;
 
 namespace VideoArchiveFinder.Tests.Thumbnails;
 
@@ -270,7 +271,8 @@ public sealed class
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
+        SqliteTestDatabasePools.ClearForTemporaryDirectory(
+            _temporaryDirectory);
 
         if (Directory.Exists(
             _temporaryDirectory))
